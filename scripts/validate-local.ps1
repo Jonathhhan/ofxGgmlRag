@@ -23,6 +23,18 @@ function Assert-Path {
 	}
 }
 
+function Assert-FileContains {
+	param(
+		[string]$Path,
+		[string]$Pattern,
+		[string]$Label
+	)
+
+	$content = Get-Content -LiteralPath $Path -Raw
+	if ($content -notmatch $Pattern) {
+		throw "$Label did not contain expected pattern: $Pattern"
+	}
+}
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $addonRoot = Split-Path -Parent $scriptRoot
 $addonsRoot = Split-Path -Parent $addonRoot
@@ -38,11 +50,13 @@ Assert-Path (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagUtils.cpp") "utility
 
 Write-Step "Checking dependency layout"
 Assert-Path (Join-Path $addonsRoot "ofxGgmlCore") "sibling ofxGgmlCore addon" -Directory
+Assert-Path (Join-Path $addonsRoot "ofxImGui") "sibling ofxImGui addon for examples" -Directory
 
 Write-Step "Checking example layout"
 $exampleRoot = Join-Path $addonRoot "ofxGgmlRagSearchExample"
 Assert-Path $exampleRoot "root-level smoke example" -Directory
 Assert-Path (Join-Path $exampleRoot "addons.make") "smoke example addons.make"
+Assert-FileContains (Join-Path $exampleRoot "addons.make") "(?m)^ofxImGui\s*$" "smoke example addons.make"
 Assert-Path (Join-Path $exampleRoot "src\main.cpp") "smoke example main.cpp"
 Assert-Path (Join-Path $exampleRoot "src\ofApp.h") "smoke example ofApp.h"
 Assert-Path (Join-Path $exampleRoot "src\ofApp.cpp") "smoke example ofApp.cpp"

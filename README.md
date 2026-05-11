@@ -15,12 +15,13 @@ Family map: https://jonathhhan.github.io/ofxGgmlCore/
 
 ## Example
 
-`ofxGgmlRagSearchExample` is a root-level citation search request smoke test. Generate it with the openFrameworks projectGenerator using addons `ofxGgmlRag` and `ofxGgmlCore`.
+`ofxGgmlRagSearchExample` is a root-level citation search request smoke test. Generate it with the openFrameworks projectGenerator using addons `ofxGgmlRag`, `ofxGgmlCore`, and `ofxImGui`.
 
 ## Dependencies
 
 - openFrameworks
 - `ofxGgmlCore`
+- `ofxImGui` for examples
 
 ## Validate
 

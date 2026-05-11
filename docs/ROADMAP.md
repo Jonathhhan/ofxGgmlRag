@@ -4,7 +4,7 @@
 
 - Seed the companion addon skeleton.
 - Keep `ofxGgmlRagSearchExample` as the first root-level smoke example.
-- Keep `ofxGgmlCore` as the only required addon dependency.
+- Keep `ofxGgmlCore` as the only required library dependency; examples may depend on `ofxImGui`.
 - Add local validation and headless tests.
 
 ## Next Milestones
