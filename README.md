@@ -4,6 +4,8 @@
 
 `ofxGgmlCore` stays the dependency. This addon owns rag-specific workflow code so core can stay small and boring.
 
+Family map: https://jonathhhan.github.io/ofxGgmlCore/
+
 ## First Milestone
 
 - define small request/result types
