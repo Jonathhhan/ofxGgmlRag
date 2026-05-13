@@ -28,12 +28,14 @@ Current addon API version: `1.0.1`.
 ## Validate
 
 ```powershell
+scripts\doctor-rag.bat
 scripts\validate-local.bat
 ```
 
 On macOS/Linux:
 
 ```sh
+./scripts/doctor-rag.sh
 ./scripts/validate-local.sh
 ```
 
