@@ -1,0 +1,25 @@
+{
+  "name": "ofxGgmlRag",
+  "lane": "retrieval",
+  "coreBaseline": "v1.0.1",
+  "requires": [
+    "ofxGgmlCore"
+  ],
+  "owns": [
+    "retrieval",
+    "citations",
+    "web crawl",
+    "local search",
+    "indexing flows"
+  ],
+  "platforms": [
+    "windows",
+    "macos",
+    "linux"
+  ],
+  "backends": [
+    "cpu",
+    "cuda",
+    "metal"
+  ]
+}
