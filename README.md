@@ -19,6 +19,9 @@ Current addon API version: `1.0.1`.
 
 `ofxGgmlRagSearchExample` is a root-level citation search request smoke test. Generate it with the openFrameworks projectGenerator using addons `ofxGgmlRag`, `ofxGgmlCore`, and `ofxImGui`.
 
+For RAG-lane planning, citation boundaries, and generated index rules, see
+[docs/RAG_WORKFLOWS.md](docs/RAG_WORKFLOWS.md).
+
 ## Dependencies
 
 - openFrameworks

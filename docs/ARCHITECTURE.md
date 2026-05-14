@@ -24,3 +24,7 @@ No dependency should point from `ofxGgmlCore` back to `ofxGgmlRag`.
 - ggml runtime setup and backend selection
 - generic tensor, graph, model metadata, and result types
 - unrelated companion workflows
+
+See `docs/RAG_WORKFLOWS.md` before expanding this lane. It defines the planning
+handoff, generated-index boundaries, citation expectations, and validation
+ladder for ingestion, chunking, retrieval, memory, and agent/tool handoff work.
