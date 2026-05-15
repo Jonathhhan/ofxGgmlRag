@@ -64,7 +64,14 @@ Use the smallest command that proves the changed layer:
 | Docs or planning only | `scripts\validate-local.bat` |
 | Local setup diagnosis | `scripts\doctor-rag.bat` |
 | Request/result/helper changes | `scripts\test-addon.bat` |
+| Ecosystem runtime smoke evidence | `scripts\run-rag-runtime-smoke.bat -Json -SummaryOnly` |
 | Example layout changes | `scripts\validate-local.bat` |
+
+`scripts\run-rag-runtime-smoke.*` is intentionally request-boundary-only until
+this addon owns a real local ingestion, embedding, or retrieval backend. It
+compiles and runs the deterministic helper tests, checks doctor readiness, and
+emits JSON for Core planning without downloading models, crawling data,
+creating vector indexes, or committing generated memory artifacts.
 
 ## Safe first tasks
 

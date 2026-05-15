@@ -32,6 +32,7 @@ For RAG-lane planning, citation boundaries, and generated index rules, see
 
 ```powershell
 scripts\doctor-rag.bat
+scripts\run-rag-runtime-smoke.bat -Json -SummaryOnly
 scripts\validate-local.bat
 ```
 
@@ -39,8 +40,17 @@ On macOS/Linux:
 
 ```sh
 ./scripts/doctor-rag.sh
+./scripts/run-rag-runtime-smoke.sh -Json -SummaryOnly
 ./scripts/validate-local.sh
 ```
+
+`scripts\run-rag-runtime-smoke.*` is the lane-owned runtime-smoke entrypoint
+for ecosystem planning and CI rollouts. It currently proves the deterministic
+RAG request/helper boundary and doctor readiness without claiming model-backed
+embedding generation, crawler/index persistence, vector search, citation
+extraction, or project-memory runtime support. Add backend checks here only
+after corpus inputs, generated index locations, embedding model paths, citation
+outputs, and cleanup rules are explicit.
 
 ## Boundary
 

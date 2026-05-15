@@ -74,6 +74,10 @@ Assert-Path (Join-Path $scriptRoot "doctor-rag.ps1") "RAG doctor script"
 Assert-Path (Join-Path $scriptRoot "doctor-rag.bat") "RAG doctor Windows wrapper"
 Assert-Path (Join-Path $scriptRoot "doctor-rag.sh") "RAG doctor shell wrapper"
 Assert-Path (Join-Path $scriptRoot "test-doctor-rag.ps1") "RAG doctor smoke test"
+Assert-Path (Join-Path $scriptRoot "run-rag-runtime-smoke.ps1") "RAG runtime smoke script"
+Assert-Path (Join-Path $scriptRoot "run-rag-runtime-smoke.bat") "RAG runtime smoke Windows wrapper"
+Assert-Path (Join-Path $scriptRoot "run-rag-runtime-smoke.sh") "RAG runtime smoke shell wrapper"
+Assert-Path (Join-Path $scriptRoot "test-rag-runtime-smoke.ps1") "RAG runtime smoke contract test"
 
 $nestedExamples = Join-Path $addonRoot "examples"
 if (Test-Path -LiteralPath $nestedExamples -PathType Container) {
@@ -102,6 +106,9 @@ Write-Step "Checking RAG doctor"
 if (!$?) {
 	throw "RAG doctor smoke test failed"
 }
+
+Write-Step "Checking RAG runtime smoke contract"
+& (Join-Path $scriptRoot "test-rag-runtime-smoke.ps1")
 
 Write-Step "Running headless tests"
 & (Join-Path $scriptRoot "test-addon.ps1")
