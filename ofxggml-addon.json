@@ -12,6 +12,13 @@
     "local search",
     "indexing flows"
   ],
+  "features": [
+    "document ingestion workflow boundary",
+    "local search and retrieval",
+    "citation-aware result planning",
+    "project memory boundaries",
+    "runtime smoke validation entrypoint"
+  ],
   "platforms": [
     "windows",
     "macos",
