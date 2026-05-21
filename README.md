@@ -8,6 +8,14 @@ Family map: https://jonathhhan.github.io/ofxGgmlCore/
 
 Current addon API version: `1.0.1`.
 
+## Features
+
+- document ingestion workflow boundary
+- local search and retrieval
+- citation-aware result planning
+- project memory boundaries
+- runtime smoke validation entrypoint
+
 ## First Milestone
 
 - define small request/result types
