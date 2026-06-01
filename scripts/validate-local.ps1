@@ -95,8 +95,12 @@ $forbidden = @(
 )
 
 foreach ($relative in $forbidden) {
-	$path = Join-Path $addonRoot $relative
-	if (Test-Path -LiteralPath $path) {
+	$pathspec = $relative -replace "\\", "/"
+	$tracked = git -C $addonRoot ls-files -- $pathspec
+	if ($LASTEXITCODE -ne 0) {
+		throw "Failed to inspect generated artifact path: $relative"
+	}
+	if ($tracked) {
 		throw "Generated or local-only path should not be committed here: $relative"
 	}
 }
@@ -111,7 +115,7 @@ Write-Step "Checking RAG runtime smoke contract"
 & (Join-Path $scriptRoot "test-rag-runtime-smoke.ps1")
 
 Write-Step "Running headless tests"
-& (Join-Path $scriptRoot "test-addon.ps1")
+& (Join-Path $scriptRoot "test-addon.ps1") -Clean
 if ($LASTEXITCODE -ne 0) {
 	throw "Headless tests failed with exit code $LASTEXITCODE"
 }

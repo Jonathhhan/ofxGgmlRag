@@ -12,6 +12,22 @@ Current addon API version: `1.0.1`.
 
 - document ingestion workflow boundary
 - local search and retrieval
+- deterministic request validation
+- deterministic text chunking with source offsets
+- deterministic in-memory chunk search
+- minimum-score retrieval filtering
+- phrase-aware retrieval scoring
+- deterministic search-hit excerpts
+- citation-aware search result assembly
+- deterministic retrieval context assembly
+- deterministic in-memory retrieval pipeline
+- source-root scoped retrieval boundaries
+- retrieval diagnostics and counters
+- deterministic retrieval summary formatting
+- deterministic retrieval report formatting
+- reference-aware retrieval reports
+- deterministic reference bibliography formatting
+- citation and source-span helpers
 - citation-aware result planning
 - project memory boundaries
 - runtime smoke validation entrypoint
@@ -19,6 +35,7 @@ Current addon API version: `1.0.1`.
 ## First Milestone
 
 - define small request/result types
+- define validation, chunking, search, context, citation, retrieval, and result assembly helper contracts
 - keep one root-level smoke example
 - keep generated models, media, builds, and IDE files out of git
 - validate the addon with local headless tests
