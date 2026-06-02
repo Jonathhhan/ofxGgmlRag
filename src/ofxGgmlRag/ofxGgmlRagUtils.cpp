@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iomanip>
 #include <sstream>
 
 namespace ofxGgmlRagUtils {
@@ -74,12 +75,145 @@ namespace ofxGgmlRagUtils {
 			return true;
 		}
 
+		bool ContainsAnyTag(const std::vector<std::string> & tags, const std::vector<std::string> & excludedTags) {
+			for (const auto & excluded : excludedTags) {
+				if (std::find(tags.begin(), tags.end(), excluded) != tags.end()) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		bool MatchesAnySourceRoot(const std::vector<std::string> & sourceRoots, const std::string & source) {
+			for (const auto & root : sourceRoots) {
+				if (sourceMatchesRoot(root, source)) {
+					return true;
+				}
+			}
+			return false;
+		}
+
 		bool AppendWithinLimit(std::string & target, const std::string & value, std::size_t maxChars) {
 			if (target.size() + value.size() > maxChars) {
 				return false;
 			}
 			target += value;
 			return true;
+		}
+
+		void AppendJsonString(std::ostringstream & out, const std::string & value) {
+			out << "\"";
+			for (const auto ch : value) {
+				const auto byte = static_cast<unsigned char>(ch);
+				switch (ch) {
+					case '"':
+						out << "\\\"";
+						break;
+					case '\\':
+						out << "\\\\";
+						break;
+					case '\n':
+						out << "\\n";
+						break;
+					case '\r':
+						out << "\\r";
+						break;
+					case '\t':
+						out << "\\t";
+						break;
+					default:
+						if (byte < 0x20) {
+							out << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(byte) << std::dec << std::setfill(' ');
+						} else {
+							out << ch;
+						}
+						break;
+				}
+			}
+			out << "\"";
+		}
+
+		void AppendJsonStringArray(std::ostringstream & out, const std::vector<std::string> & values) {
+			out << "[";
+			for (std::size_t i = 0; i < values.size(); ++i) {
+				if (i > 0) {
+					out << ",";
+				}
+				AppendJsonString(out, values[i]);
+			}
+			out << "]";
+		}
+
+		void AppendJsonCitations(std::ostringstream & out, const std::vector<ofxGgmlRagCitation> & citations) {
+			out << "[";
+			for (std::size_t i = 0; i < citations.size(); ++i) {
+				if (i > 0) {
+					out << ",";
+				}
+				const auto & citation = citations[i];
+				out << "{";
+				out << "\"source\":";
+				AppendJsonString(out, citation.source);
+				out << ",\"label\":";
+				AppendJsonString(out, citation.label);
+				out << ",\"url\":";
+				AppendJsonString(out, citation.url);
+				out << ",\"start\":" << citation.start;
+				out << ",\"end\":" << citation.end;
+				out << "}";
+			}
+			out << "]";
+		}
+
+		std::string PrettyPrintJson(const std::string & compact) {
+			std::ostringstream pretty;
+			int indent = 0;
+			bool inString = false;
+			bool escaped = false;
+
+			for (const auto ch : compact) {
+				if (inString) {
+					pretty << ch;
+					if (escaped) {
+						escaped = false;
+					} else if (ch == '\\') {
+						escaped = true;
+					} else if (ch == '"') {
+						inString = false;
+					}
+					continue;
+				}
+
+				switch (ch) {
+					case '"':
+						inString = true;
+						pretty << ch;
+						break;
+					case '{':
+					case '[':
+						pretty << ch << "\n";
+						++indent;
+						pretty << std::string(static_cast<std::size_t>(indent * 2), ' ');
+						break;
+					case '}':
+					case ']':
+						pretty << "\n";
+						--indent;
+						pretty << std::string(static_cast<std::size_t>(indent * 2), ' ') << ch;
+						break;
+					case ',':
+						pretty << ch << "\n" << std::string(static_cast<std::size_t>(indent * 2), ' ');
+						break;
+					case ':':
+						pretty << ": ";
+						break;
+					default:
+						pretty << ch;
+						break;
+				}
+			}
+
+			return pretty.str();
 		}
 	}
 
@@ -238,9 +372,18 @@ namespace ofxGgmlRagUtils {
 		}
 
 		const auto queryPhrase = LowerAscii(trim(query));
+		const auto minMatchedTerms = std::max<std::size_t>(1, options.minMatchedTerms);
 		const auto requiredTags = NormalizeTags(options.requiredTags);
+		const auto excludedTags = NormalizeTags(options.excludedTags);
+		const auto excludedSourceRoots = NormalizeTags(options.excludedSourceRoots);
 		for (const auto & chunk : chunks) {
+			if (MatchesAnySourceRoot(excludedSourceRoots, chunk.source)) {
+				continue;
+			}
 			if (!ContainsAllTags(chunk.tags, requiredTags)) {
+				continue;
+			}
+			if (ContainsAnyTag(chunk.tags, excludedTags)) {
 				continue;
 			}
 
@@ -253,6 +396,9 @@ namespace ofxGgmlRagUtils {
 				}
 			}
 			if (hit.matchedTerms.empty()) {
+				continue;
+			}
+			if (hit.matchedTerms.size() < minMatchedTerms) {
 				continue;
 			}
 
@@ -451,8 +597,13 @@ namespace ofxGgmlRagUtils {
 		}
 
 		const auto requestTags = normalizedTags(request);
+		const auto excludedSourceRoots = NormalizeTags(options.search.excludedSourceRoots);
 		for (const auto & document : documents) {
 			if (!sourceMatchesRoot(request.sourceRoot, document.source)) {
+				++retrieval.stats.skippedDocumentCount;
+				continue;
+			}
+			if (MatchesAnySourceRoot(excludedSourceRoots, document.source)) {
 				++retrieval.stats.skippedDocumentCount;
 				continue;
 			}
@@ -606,6 +757,74 @@ namespace ofxGgmlRagUtils {
 		}
 
 		return report.str();
+	}
+
+	std::string formatRetrievalJson(
+		const ofxGgmlRagRetrieval & retrieval,
+		const ofxGgmlRagReportOptions & options) {
+		std::ostringstream json;
+		const auto hitCount = std::min(options.maxHits, retrieval.hits.size());
+
+		json << "{";
+		json << "\"success\":" << (retrieval.result.success ? "true" : "false");
+		json << ",\"summary\":";
+		AppendJsonString(json, summarize(retrieval));
+		json << ",\"error\":";
+		AppendJsonString(json, retrieval.result.error);
+		json << ",\"stats\":{";
+		json << "\"documents\":" << retrieval.stats.documentCount;
+		json << ",\"scoped\":" << retrieval.stats.scopedDocumentCount;
+		json << ",\"skipped\":" << retrieval.stats.skippedDocumentCount;
+		json << ",\"chunks\":" << retrieval.stats.chunkCount;
+		json << ",\"hits\":" << retrieval.stats.hitCount;
+		json << ",\"citations\":" << retrieval.stats.citationCount;
+		json << ",\"contextTruncated\":" << (retrieval.stats.contextTruncated ? "true" : "false");
+		json << "}";
+
+		json << ",\"hits\":[";
+		for (std::size_t i = 0; i < hitCount; ++i) {
+			if (i > 0) {
+				json << ",";
+			}
+			const auto & hit = retrieval.hits[i];
+			const auto citation = citationFromChunk(hit.chunk);
+			json << "{";
+			json << "\"source\":";
+			AppendJsonString(json, hit.chunk.source);
+			json << ",\"index\":" << hit.chunk.index;
+			json << ",\"start\":" << hit.chunk.start;
+			json << ",\"end\":" << hit.chunk.end;
+			json << ",\"tags\":";
+			AppendJsonStringArray(json, hit.chunk.tags);
+			json << ",\"score\":" << hit.score;
+			json << ",\"matchedTerms\":";
+			AppendJsonStringArray(json, hit.matchedTerms);
+			json << ",\"excerpt\":";
+			AppendJsonString(json, excerptForHit(hit, options.excerpt));
+			json << ",\"citation\":";
+			AppendJsonString(json, formatCitation(citation));
+			json << "}";
+		}
+		json << "]";
+		json << ",\"hitsTruncated\":" << (retrieval.hits.size() - hitCount);
+		json << ",\"citations\":";
+		AppendJsonCitations(json, retrieval.result.citations);
+
+		if (options.includeReferences) {
+			json << ",\"references\":";
+			AppendJsonStringArray(json, retrieval.result.references);
+		}
+		if (options.includeContext) {
+			json << ",\"context\":";
+			AppendJsonString(json, retrieval.context.text);
+		}
+
+		json << "}";
+		const auto compact = json.str();
+		if (options.prettyJson) {
+			return PrettyPrintJson(compact);
+		}
+		return compact;
 	}
 
 	std::string summarize(const ofxGgmlRagResult & result) {

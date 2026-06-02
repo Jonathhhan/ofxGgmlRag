@@ -141,7 +141,39 @@ int main() {
 		return 1;
 	}
 
+	searchOptions.requiredTags = { " citations " };
+	searchOptions.excludedTags = { " memory " };
+	hits = ofxGgmlRagUtils::searchChunks("citation", searchChunks, searchOptions);
+	if (hits.size() != 1 || hits[0].chunk.source != "b.md") {
+		std::cerr << "chunk search did not filter by excluded tags\n";
+		return 1;
+	}
+
+	ofxGgmlRagChunk publicSourceChunk;
+	publicSourceChunk.source = "docs/public/context.md";
+	publicSourceChunk.index = 0;
+	publicSourceChunk.text = "citation memory";
+	ofxGgmlRagChunk privateSourceChunk;
+	privateSourceChunk.source = "docs/private/context.md";
+	privateSourceChunk.index = 1;
+	privateSourceChunk.text = "citation memory";
+	ofxGgmlRagSearchOptions sourceFilterOptions;
+	sourceFilterOptions.excludedSourceRoots = { " docs/private " };
+	hits = ofxGgmlRagUtils::searchChunks("citation", { privateSourceChunk, publicSourceChunk }, sourceFilterOptions);
+	if (hits.size() != 1 || hits[0].chunk.source != "docs/public/context.md") {
+		std::cerr << "chunk search did not filter by excluded source roots\n";
+		return 1;
+	}
+
 	searchOptions.requiredTags.clear();
+	searchOptions.excludedTags.clear();
+	searchOptions.minMatchedTerms = 3;
+	hits = ofxGgmlRagUtils::searchChunks("workflow citation memory", searchChunks, searchOptions);
+	if (hits.size() != 1 || hits[0].chunk.source != "a.md") {
+		std::cerr << "chunk search did not filter by minimum matched terms\n";
+		return 1;
+	}
+	searchOptions.minMatchedTerms = 1;
 	searchOptions.minScore = 0.75;
 	hits = ofxGgmlRagUtils::searchChunks("workflow citation memory", searchChunks, searchOptions);
 	if (hits.size() != 1 || hits[0].chunk.source != "a.md") {
@@ -303,6 +335,20 @@ int main() {
 		std::cerr << "retrieval pipeline did not assemble deterministic evidence\n";
 		return 1;
 	}
+	documents.push_back({ "docs/private/secret.md", "citation memory should stay out of retrieval.", { "private" } });
+	retrievalOptions.search.excludedSourceRoots = { "docs/private" };
+	const auto excludedSourceRetrieval = ofxGgmlRagUtils::retrieve(retrievalRequest, documents, retrievalOptions);
+	if (!excludedSourceRetrieval ||
+		excludedSourceRetrieval.stats.documentCount != 4 ||
+		excludedSourceRetrieval.stats.scopedDocumentCount != 2 ||
+		excludedSourceRetrieval.stats.skippedDocumentCount != 2 ||
+		excludedSourceRetrieval.stats.chunkCount != 2 ||
+		excludedSourceRetrieval.hits[0].chunk.source != "docs/a.md") {
+		std::cerr << "retrieval pipeline did not exclude source roots before chunking\n";
+		return 1;
+	}
+	documents.pop_back();
+	retrievalOptions.search.excludedSourceRoots.clear();
 	const auto statsText = ofxGgmlRagUtils::formatStats(retrieval.stats);
 	if (statsText != "documents=3 scoped=2 skipped=1 chunks=2 hits=1 citations=1 contextTruncated=false") {
 		std::cerr << "retrieval stats formatting changed unexpectedly\n";
@@ -339,6 +385,45 @@ int main() {
 	if (contextReport.find("context:") == std::string::npos ||
 		contextReport.find("Query: citation memory") == std::string::npos) {
 		std::cerr << "retrieval report did not include optional context\n";
+		return 1;
+	}
+	const auto retrievalJson = ofxGgmlRagUtils::formatRetrievalJson(retrieval, reportOptions);
+	if (retrievalJson.find("\"success\":true") == std::string::npos ||
+		retrievalJson.find("\"documents\":3") == std::string::npos ||
+		retrievalJson.find("\"source\":\"docs/a.md\"") == std::string::npos ||
+		retrievalJson.find("\"start\":0") == std::string::npos ||
+		retrievalJson.find("\"tags\":[\"docs\",\"retrieval\"]") == std::string::npos ||
+		retrievalJson.find("\"matchedTerms\":[\"citation\",\"memory\"]") == std::string::npos ||
+		retrievalJson.find("\"citations\":[{\"source\":\"docs/a.md\",\"label\":\"docs/a.md#0\",\"url\":\"\",\"start\":0,\"end\":") == std::string::npos ||
+		retrievalJson.find("\"references\":[\"docs/a.md#0") == std::string::npos ||
+		retrievalJson.find("\"context\":\"Query: citation memory\\n\\n") == std::string::npos) {
+		std::cerr << "retrieval JSON did not include structured evidence\n";
+		return 1;
+	}
+	if (retrievalJson.find("\n") != std::string::npos) {
+		std::cerr << "compact retrieval JSON unexpectedly contained newlines\n";
+		return 1;
+	}
+	reportOptions.prettyJson = true;
+	const auto prettyRetrievalJson = ofxGgmlRagUtils::formatRetrievalJson(retrieval, reportOptions);
+	if (prettyRetrievalJson.find("\n  \"success\": true") == std::string::npos ||
+		prettyRetrievalJson.find("\n    \"documents\": 3") == std::string::npos) {
+		std::cerr << "pretty retrieval JSON did not include indentation\n";
+		return 1;
+	}
+	reportOptions.prettyJson = false;
+	ofxGgmlRagSearchHit jsonEscapeHit;
+	jsonEscapeHit.chunk.source = "docs/quote.md";
+	jsonEscapeHit.chunk.text = "quote \"line\"\nnext";
+	jsonEscapeHit.chunk.index = 2;
+	jsonEscapeHit.matchedTerms = { "quote" };
+	ofxGgmlRagRetrieval jsonEscapeRetrieval;
+	jsonEscapeRetrieval.result.success = true;
+	jsonEscapeRetrieval.hits = { jsonEscapeHit };
+	jsonEscapeRetrieval.result.references = { "docs/quote.md#2" };
+	const auto escapedJson = ofxGgmlRagUtils::formatRetrievalJson(jsonEscapeRetrieval, reportOptions);
+	if (escapedJson.find("quote \\\"line\\\"\\nnext") == std::string::npos) {
+		std::cerr << "retrieval JSON did not escape string content\n";
 		return 1;
 	}
 

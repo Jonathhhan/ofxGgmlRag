@@ -46,6 +46,9 @@ namespace ofxGgmlRagUtils {
 	std::string formatRetrieval(
 		const ofxGgmlRagRetrieval & retrieval,
 		const ofxGgmlRagReportOptions & options = ofxGgmlRagReportOptions());
+	std::string formatRetrievalJson(
+		const ofxGgmlRagRetrieval & retrieval,
+		const ofxGgmlRagReportOptions & options = ofxGgmlRagReportOptions());
 	std::string summarize(const ofxGgmlRagResult & result);
 	std::string summarize(const ofxGgmlRagRetrieval & retrieval);
 }

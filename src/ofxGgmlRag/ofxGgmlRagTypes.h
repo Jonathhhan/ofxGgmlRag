@@ -50,9 +50,12 @@ struct ofxGgmlRagChunk {
 
 struct ofxGgmlRagSearchOptions {
 	std::size_t topK = 5;
+	std::size_t minMatchedTerms = 1;
 	double minScore = 0.0;
 	double phraseBoost = 0.0;
 	std::vector<std::string> requiredTags;
+	std::vector<std::string> excludedTags;
+	std::vector<std::string> excludedSourceRoots;
 };
 
 struct ofxGgmlRagSearchHit {
@@ -93,6 +96,7 @@ struct ofxGgmlRagReportOptions {
 	std::size_t maxHits = 5;
 	bool includeReferences = true;
 	bool includeContext = false;
+	bool prettyJson = false;
 	ofxGgmlRagExcerptOptions excerpt;
 };
 

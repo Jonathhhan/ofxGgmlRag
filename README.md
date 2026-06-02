@@ -16,15 +16,22 @@ Current addon API version: `1.0.1`.
 - deterministic text chunking with source offsets
 - deterministic in-memory chunk search
 - minimum-score retrieval filtering
+- minimum matched-term retrieval filtering
+- excluded-tag retrieval filtering
 - phrase-aware retrieval scoring
 - deterministic search-hit excerpts
 - citation-aware search result assembly
 - deterministic retrieval context assembly
 - deterministic in-memory retrieval pipeline
 - source-root scoped retrieval boundaries
+- pre-chunk excluded source-root retrieval filtering
 - retrieval diagnostics and counters
 - deterministic retrieval summary formatting
 - deterministic retrieval report formatting
+- deterministic JSON retrieval reports
+- structured hit metadata in JSON reports
+- structured citation JSON output
+- pretty JSON retrieval reports
 - reference-aware retrieval reports
 - deterministic reference bibliography formatting
 - citation and source-span helpers
