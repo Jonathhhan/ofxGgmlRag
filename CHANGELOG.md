@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Added a deterministic local text-corpus bridge for user-provided `.md` and
+  `.txt` files.
+- Added corpus loading options, stats, warnings, and result types.
+- Added `ofxGgmlRagUtils::loadTextCorpus(...)` for feeding local files into the
+  existing request-boundary retrieval helper.
+- Added `ofxGgmlRagUtils::retrieveTextCorpus(...)` for one-call source-root
+  retrieval.
+- Extended headless tests and runtime smoke coverage with a corpus retrieval
+  probe.
+- Updated `doctor-rag.ps1`, `run-rag-runtime-smoke.ps1`, and the ImGui-backed
+  `ofxGgmlRagSearchExample` to expose local source-root readiness.
+- Added getting-started docs for fresh clone validation, corpus smoke, and
+  example launch.
+- Kept embedding generation, vector indexes, web crawling, model downloads, and
+  model-backed generation out of scope.
+
 ## 1.0.1 - 2026-05-12
 
 - Added independent RAG addon version metadata.

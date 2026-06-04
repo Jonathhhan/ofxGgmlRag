@@ -1,8 +1,58 @@
 #include "ofxGgmlRag.h"
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <system_error>
 
-int main() {
+namespace {
+	std::string ArgumentValue(int argc, char ** argv, const std::string & name) {
+		for (int i = 1; i + 1 < argc; ++i) {
+			if (argv[i] == name) {
+				return argv[i + 1];
+			}
+		}
+		return "";
+	}
+
+	bool HasArgument(int argc, char ** argv, const std::string & name) {
+		for (int i = 1; i < argc; ++i) {
+			if (argv[i] == name) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	int RunCorpusSmoke(int argc, char ** argv) {
+		const auto query = ArgumentValue(argc, argv, "--query");
+		const auto sourceRoot = ArgumentValue(argc, argv, "--source-root");
+		const auto json = HasArgument(argc, argv, "--json");
+		const auto corpus = ofxGgmlRagUtils::loadTextCorpus(sourceRoot);
+
+		ofxGgmlRagRetrieval retrieval;
+		ofxGgmlRagRequest request;
+		request.query = query.empty() ? "citation memory" : query;
+		request.sourceRoot = corpus ? corpus.sourceRoot : sourceRoot;
+		retrieval = ofxGgmlRagUtils::retrieveTextCorpus(request);
+
+		ofxGgmlRagReportOptions reportOptions;
+		reportOptions.includeContext = true;
+		reportOptions.prettyJson = json;
+		if (json) {
+			std::cout << ofxGgmlRagUtils::formatRetrievalJson(retrieval, reportOptions) << "\n";
+		} else {
+			std::cout << ofxGgmlRagUtils::formatRetrieval(retrieval, reportOptions);
+		}
+		return retrieval ? 0 : 1;
+	}
+}
+
+int main(int argc, char ** argv) {
+	if (argc > 1 && std::string(argv[1]) == "--corpus-smoke") {
+		return RunCorpusSmoke(argc, argv);
+	}
+
 	if (OFXGGML_RAG_VERSION_MAJOR != 1 ||
 		OFXGGML_RAG_VERSION_MINOR != 0 ||
 		OFXGGML_RAG_VERSION_PATCH != 1 ||
@@ -57,6 +107,99 @@ int main() {
 		std::cerr << "description did not include request input\n";
 		return 1;
 	}
+
+	namespace fs = std::filesystem;
+	std::error_code fsError;
+	const auto corpusRoot = fs::temp_directory_path(fsError) / "ofxGgmlRag-corpus-test";
+	if (fsError) {
+		std::cerr << "could not resolve temp directory\n";
+		return 1;
+	}
+	fs::remove_all(corpusRoot, fsError);
+	fsError.clear();
+	if (!fs::create_directories(corpusRoot / "nested", fsError) || fsError) {
+		std::cerr << "could not create corpus fixture\n";
+		return 1;
+	}
+	{
+		std::ofstream(corpusRoot / "a.md", std::ios::binary) << "workflow citation memory.";
+		std::ofstream(corpusRoot / "b.txt", std::ios::binary) << "citation memory from beta.";
+		std::ofstream(corpusRoot / "nested" / "c.md", std::ios::binary) << "nested citation memory.";
+		std::ofstream(corpusRoot / "empty.md", std::ios::binary) << "   \n";
+		std::ofstream binary(corpusRoot / "binary.txt", std::ios::binary);
+		binary.write("binary\0content", 14);
+		std::ofstream(corpusRoot / "skip.json", std::ios::binary) << "{\"text\":\"citation\"}";
+	}
+
+	ofxGgmlRagCorpusOptions corpusOptions;
+	corpusOptions.tags = { " corpus ", "docs", "corpus" };
+	const auto corpus = ofxGgmlRagUtils::loadTextCorpus(corpusRoot.string(), corpusOptions);
+	if (!corpus ||
+		corpus.documents.size() != 3 ||
+		corpus.stats.discoveredFileCount != 6 ||
+		corpus.stats.loadedDocumentCount != 3 ||
+		corpus.stats.skippedFileCount != 3 ||
+		corpus.documents[0].source.find("a.md") == std::string::npos ||
+		corpus.documents[1].source.find("b.txt") == std::string::npos ||
+		corpus.documents[2].source.find("nested/c.md") == std::string::npos ||
+		corpus.documents[0].tags.size() != 2 ||
+		corpus.documents[0].tags[0] != "corpus" ||
+		!ofxGgmlRagUtils::sourceMatchesRoot(corpus.sourceRoot, corpus.documents[2].source)) {
+		std::cerr << "text corpus loading did not produce deterministic documents\n";
+		return 1;
+	}
+
+	corpusOptions.recursive = false;
+	const auto flatCorpus = ofxGgmlRagUtils::loadTextCorpus(corpusRoot.string(), corpusOptions);
+	if (!flatCorpus ||
+		flatCorpus.documents.size() != 2 ||
+		flatCorpus.documents[0].source.find("a.md") == std::string::npos ||
+		flatCorpus.documents[1].source.find("b.txt") == std::string::npos) {
+		std::cerr << "text corpus loading did not honor nonrecursive mode\n";
+		return 1;
+	}
+
+	corpusOptions.recursive = true;
+	corpusOptions.maxFileBytes = 4;
+	const auto oversizedCorpus = ofxGgmlRagUtils::loadTextCorpus(corpusRoot.string(), corpusOptions);
+	if (oversizedCorpus ||
+		oversizedCorpus.error != "no supported text documents" ||
+		oversizedCorpus.warnings.empty()) {
+		std::cerr << "text corpus loading did not report oversized corpus failure\n";
+		return 1;
+	}
+
+	ofxGgmlRagRequest corpusRequest;
+	corpusRequest.query = "nested memory";
+	corpusRequest.sourceRoot = corpus.sourceRoot;
+	ofxGgmlRagRetrievalOptions corpusRetrievalOptions;
+	corpusRetrievalOptions.search.topK = 1;
+	const auto corpusRetrieval = ofxGgmlRagUtils::retrieve(corpusRequest, corpus.documents, corpusRetrievalOptions);
+	if (!corpusRetrieval ||
+		corpusRetrieval.hits.size() != 1 ||
+		corpusRetrieval.hits[0].chunk.source.find("nested/c.md") == std::string::npos ||
+		corpusRetrieval.stats.documentCount != 3 ||
+		corpusRetrieval.stats.hitCount != 1) {
+		std::cerr << "loaded text corpus did not feed deterministic retrieval\n";
+		return 1;
+	}
+	const auto directCorpusRetrieval = ofxGgmlRagUtils::retrieveTextCorpus(corpusRequest, ofxGgmlRagCorpusOptions(), corpusRetrievalOptions);
+	if (!directCorpusRetrieval ||
+		directCorpusRetrieval.hits.size() != 1 ||
+		directCorpusRetrieval.hits[0].chunk.source.find("nested/c.md") == std::string::npos ||
+		directCorpusRetrieval.stats.documentCount != 3 ||
+		directCorpusRetrieval.stats.hitCount != 1) {
+		std::cerr << "direct text corpus retrieval did not assemble deterministic evidence\n";
+		return 1;
+	}
+	corpusRequest.sourceRoot = (corpusRoot / "missing").string();
+	const auto missingTextCorpusRetrieval = ofxGgmlRagUtils::retrieveTextCorpus(corpusRequest);
+	if (missingTextCorpusRetrieval ||
+		missingTextCorpusRetrieval.result.error != "sourceRoot was not found") {
+		std::cerr << "direct text corpus retrieval did not report missing sourceRoot\n";
+		return 1;
+	}
+	fs::remove_all(corpusRoot, fsError);
 
 	ofxGgmlRagChunkOptions chunkOptions;
 	chunkOptions.maxChars = 18;

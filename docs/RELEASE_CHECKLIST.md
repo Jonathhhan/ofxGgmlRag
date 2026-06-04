@@ -55,12 +55,13 @@ macOS/Linux:
 
 - root-level openFrameworks example
 - `ofxImGui` dependency declared in `addons.make`
-- citation search request smoke surface
-- clear future path for ingestion, crawling, chunking, embeddings, search, and
-  citations
+- citation search request smoke surface with optional local text-corpus input
+- deterministic `.md` / `.txt` bridge only; no generated indexes or model files
+- clear future path for crawling, embeddings, vector search, reranking, and
+  model-backed citations
 
-This release does not promise a complete model-backed RAG runtime, crawler, or
-vector index.
+This release does not promise a complete model-backed RAG runtime, crawler,
+embedding backend, or vector index.
 
 ## Before Tagging
 

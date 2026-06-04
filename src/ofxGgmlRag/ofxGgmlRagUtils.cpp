@@ -2,11 +2,19 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
+#include <iterator>
+#include <limits>
 #include <sstream>
+#include <system_error>
 
 namespace ofxGgmlRagUtils {
 	namespace {
+		namespace fs = std::filesystem;
+
 		bool IsWhitespace(char value) {
 			return std::isspace(static_cast<unsigned char>(value)) != 0;
 		}
@@ -26,6 +34,10 @@ namespace ofxGgmlRagUtils {
 				normalized.pop_back();
 			}
 			return normalized;
+		}
+
+		std::string PathToSource(const fs::path & path) {
+			return NormalizeSourcePath(path.lexically_normal().generic_string());
 		}
 
 		std::string LowerAscii(const std::string & value) {
@@ -49,6 +61,91 @@ namespace ofxGgmlRagUtils {
 				}
 			}
 			return tags;
+		}
+
+		std::vector<std::string> NormalizeExtensions(const std::vector<std::string> & input) {
+			std::vector<std::string> extensions;
+			for (const auto & extension : input) {
+				auto normalized = LowerAscii(trim(extension));
+				if (normalized.empty()) {
+					continue;
+				}
+				if (normalized[0] != '.') {
+					normalized = "." + normalized;
+				}
+				if (std::find(extensions.begin(), extensions.end(), normalized) == extensions.end()) {
+					extensions.push_back(normalized);
+				}
+			}
+			return extensions;
+		}
+
+		bool HasAllowedExtension(const fs::path & path, const std::vector<std::string> & extensions) {
+			if (extensions.empty()) {
+				return true;
+			}
+			const auto extension = LowerAscii(path.extension().generic_string());
+			return std::find(extensions.begin(), extensions.end(), extension) != extensions.end();
+		}
+
+		bool LooksBinary(const std::string & text) {
+			return text.find('\0') != std::string::npos;
+		}
+
+		void AddWarning(ofxGgmlRagCorpus & corpus, const std::string & warning) {
+			if (std::find(corpus.warnings.begin(), corpus.warnings.end(), warning) == corpus.warnings.end()) {
+				corpus.warnings.push_back(warning);
+			}
+		}
+
+		std::vector<fs::path> CollectRegularFiles(const fs::path & root, bool recursive, ofxGgmlRagCorpus & corpus) {
+			std::vector<fs::path> files;
+			std::error_code error;
+
+			if (recursive) {
+				fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied, error);
+				fs::recursive_directory_iterator end;
+				if (error) {
+					AddWarning(corpus, "could not scan sourceRoot: " + error.message());
+					return files;
+				}
+				for (; it != end; it.increment(error)) {
+					if (error) {
+						AddWarning(corpus, "skipped directory entry: " + error.message());
+						error.clear();
+						continue;
+					}
+					if (!it->is_regular_file(error)) {
+						error.clear();
+						continue;
+					}
+					files.push_back(it->path());
+				}
+			} else {
+				fs::directory_iterator it(root, fs::directory_options::skip_permission_denied, error);
+				fs::directory_iterator end;
+				if (error) {
+					AddWarning(corpus, "could not scan sourceRoot: " + error.message());
+					return files;
+				}
+				for (; it != end; it.increment(error)) {
+					if (error) {
+						AddWarning(corpus, "skipped directory entry: " + error.message());
+						error.clear();
+						continue;
+					}
+					if (!it->is_regular_file(error)) {
+						error.clear();
+						continue;
+					}
+					files.push_back(it->path());
+				}
+			}
+
+			std::sort(files.begin(), files.end(), [](const fs::path & left, const fs::path & right) {
+				return PathToSource(left) < PathToSource(right);
+			});
+			return files;
 		}
 
 		std::size_t FindChunkEnd(const std::string & text, std::size_t begin, std::size_t maxChars) {
@@ -310,6 +407,99 @@ namespace ofxGgmlRagUtils {
 			description << "]";
 		}
 		return description.str();
+	}
+
+	ofxGgmlRagCorpus loadTextCorpus(
+		const std::string & sourceRoot,
+		const ofxGgmlRagCorpusOptions & options) {
+		ofxGgmlRagCorpus corpus;
+		const auto normalizedInputRoot = trim(sourceRoot);
+		if (normalizedInputRoot.empty()) {
+			corpus.error = "sourceRoot is required";
+			return corpus;
+		}
+
+		std::error_code error;
+		const auto rootPath = fs::absolute(fs::path(normalizedInputRoot), error).lexically_normal();
+		if (error) {
+			corpus.error = "could not resolve sourceRoot: " + error.message();
+			return corpus;
+		}
+		corpus.sourceRoot = PathToSource(rootPath);
+		if (!fs::exists(rootPath, error) || error) {
+			corpus.error = "sourceRoot was not found";
+			return corpus;
+		}
+		if (!fs::is_directory(rootPath, error) || error) {
+			corpus.error = "sourceRoot is not a directory";
+			return corpus;
+		}
+
+		const auto extensions = NormalizeExtensions(options.extensions);
+		const auto tags = NormalizeTags(options.tags);
+		const auto files = CollectRegularFiles(rootPath, options.recursive, corpus);
+		corpus.stats.discoveredFileCount = files.size();
+
+		for (const auto & file : files) {
+			const auto source = PathToSource(file);
+			if (!HasAllowedExtension(file, extensions)) {
+				++corpus.stats.skippedFileCount;
+				continue;
+			}
+
+			error.clear();
+			const auto byteCount = fs::file_size(file, error);
+			if (error) {
+				++corpus.stats.skippedFileCount;
+				AddWarning(corpus, "could not read size: " + source);
+				continue;
+			}
+			if (byteCount > options.maxFileBytes) {
+				++corpus.stats.skippedFileCount;
+				corpus.stats.skippedByteCount += static_cast<std::size_t>(std::min<std::uintmax_t>(
+					byteCount,
+					static_cast<std::uintmax_t>(std::numeric_limits<std::size_t>::max())));
+				AddWarning(corpus, "skipped oversized file: " + source);
+				continue;
+			}
+
+			std::ifstream input(file, std::ios::binary);
+			if (!input) {
+				++corpus.stats.skippedFileCount;
+				AddWarning(corpus, "could not read file: " + source);
+				continue;
+			}
+			std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+			if (!input.good() && !input.eof()) {
+				++corpus.stats.skippedFileCount;
+				AddWarning(corpus, "could not finish reading file: " + source);
+				continue;
+			}
+			if (LooksBinary(text)) {
+				++corpus.stats.skippedFileCount;
+				corpus.stats.skippedByteCount += text.size();
+				AddWarning(corpus, "skipped binary-looking file: " + source);
+				continue;
+			}
+			if (!options.includeEmptyFiles && trim(text).empty()) {
+				++corpus.stats.skippedFileCount;
+				continue;
+			}
+
+			ofxGgmlRagDocument document;
+			document.source = source;
+			document.text = text;
+			document.tags = tags;
+			corpus.documents.push_back(document);
+		}
+
+		corpus.stats.loadedDocumentCount = corpus.documents.size();
+		if (corpus.documents.empty()) {
+			corpus.error = "no supported text documents";
+			return corpus;
+		}
+		corpus.success = true;
+		return corpus;
 	}
 
 	std::vector<ofxGgmlRagChunk> chunkText(
@@ -631,6 +821,36 @@ namespace ofxGgmlRagUtils {
 		retrieval.stats.hitCount = retrieval.hits.size();
 		retrieval.stats.citationCount = retrieval.result.citations.size();
 		retrieval.stats.contextTruncated = retrieval.context.truncated;
+		return retrieval;
+	}
+
+	ofxGgmlRagRetrieval retrieveTextCorpus(
+		const ofxGgmlRagRequest & request,
+		const ofxGgmlRagCorpusOptions & corpusOptions,
+		const ofxGgmlRagRetrievalOptions & retrievalOptions) {
+		ofxGgmlRagRetrieval retrieval;
+		retrieval.validation = validate(request);
+		if (!retrieval.validation) {
+			retrieval.result.error = "invalid request";
+			return retrieval;
+		}
+
+		const auto corpus = loadTextCorpus(request.sourceRoot, corpusOptions);
+		retrieval.stats.documentCount = corpus.stats.loadedDocumentCount;
+		if (!corpus) {
+			retrieval.result.error = corpus.error.empty() ? "corpus load failed" : corpus.error;
+			for (const auto & warning : corpus.warnings) {
+				retrieval.validation.warnings.push_back(warning);
+			}
+			return retrieval;
+		}
+
+		auto scopedRequest = request;
+		scopedRequest.sourceRoot = corpus.sourceRoot;
+		retrieval = retrieve(scopedRequest, corpus.documents, retrievalOptions);
+		for (const auto & warning : corpus.warnings) {
+			retrieval.validation.warnings.push_back(warning);
+		}
 		return retrieval;
 	}
 

@@ -11,6 +11,8 @@ Current addon API version: `1.0.1`.
 ## Features
 
 - document ingestion workflow boundary
+- deterministic local text-corpus loading bridge
+- direct source-root text-corpus retrieval helper
 - local search and retrieval
 - deterministic request validation
 - deterministic text chunking with source offsets
@@ -54,6 +56,9 @@ Current addon API version: `1.0.1`.
 For RAG-lane planning, citation boundaries, and generated index rules, see
 [docs/RAG_WORKFLOWS.md](docs/RAG_WORKFLOWS.md).
 
+For the fresh clone, validation, local corpus smoke, and example launch path,
+see [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
+
 ## Dependencies
 
 - openFrameworks
@@ -83,6 +88,24 @@ embedding generation, crawler/index persistence, vector search, citation
 extraction, or project-memory runtime support. Add backend checks here only
 after corpus inputs, generated index locations, embedding model paths, citation
 outputs, and cleanup rules are explicit.
+
+`ofxGgmlRagUtils::loadTextCorpus(...)` is the first local bridge: it reads
+user-provided `.md` and `.txt` files from a source root into
+`ofxGgmlRagDocument` values for the existing deterministic retrieval helper.
+It does not create indexes, download models, run embeddings, or write generated
+artifacts.
+
+`ofxGgmlRagUtils::retrieveTextCorpus(...)` combines source-root loading and
+deterministic retrieval for apps and examples that do not need to inspect the
+intermediate document list.
+
+Pass `-SourceRoot` to `scripts\doctor-rag.ps1` to report supported local text
+corpus files before wiring an app or example to the bridge.
+
+Pass `-Query` and `-SourceRoot` to `scripts\run-rag-runtime-smoke.ps1` to carry
+the same corpus bridge signal through runtime smoke output and run a
+deterministic text-corpus retrieval probe while keeping `ModelBacked=false` and
+`IndexBacked=false`.
 
 ## Boundary
 

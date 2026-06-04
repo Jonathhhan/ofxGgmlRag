@@ -16,6 +16,34 @@ struct ofxGgmlRagDocument {
 	std::vector<std::string> tags;
 };
 
+struct ofxGgmlRagCorpusOptions {
+	std::vector<std::string> extensions = { ".md", ".txt" };
+	std::vector<std::string> tags;
+	std::size_t maxFileBytes = 1024 * 1024;
+	bool recursive = true;
+	bool includeEmptyFiles = false;
+};
+
+struct ofxGgmlRagCorpusStats {
+	std::size_t discoveredFileCount = 0;
+	std::size_t loadedDocumentCount = 0;
+	std::size_t skippedFileCount = 0;
+	std::size_t skippedByteCount = 0;
+};
+
+struct ofxGgmlRagCorpus {
+	bool success = false;
+	std::string sourceRoot;
+	std::string error;
+	std::vector<std::string> warnings;
+	ofxGgmlRagCorpusStats stats;
+	std::vector<ofxGgmlRagDocument> documents;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
 struct ofxGgmlRagValidation {
 	bool valid = false;
 	std::vector<std::string> errors;

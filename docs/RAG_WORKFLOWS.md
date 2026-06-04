@@ -86,3 +86,50 @@ Good early RAG-lane tasks are:
 Avoid broadening runtime behavior until corpus inputs, generated artifacts,
 retrieval backend expectations, citation outputs, and validation commands are
 explicit.
+
+## First bridge handoff
+
+Workflow:
+Load a user-provided local text corpus into `ofxGgmlRagDocument` values, then
+feed the existing deterministic `retrieve(...)` helper. This bridge is a
+practical input path, not an embedding, vector-store, crawler, or generation
+backend.
+
+Input corpus:
+The first bridge accepts files under a caller-provided source root. Supported
+extensions are plain text formats such as `.md` and `.txt`. File traversal must
+be deterministic, source-root scoped, and bounded by an explicit max file size.
+Binary-looking files, unsupported extensions, empty files, and unreadable files
+are skipped with stats or warnings instead of becoming committed artifacts.
+
+Chunking strategy:
+Use `ofxGgmlRagChunkOptions` and the existing chunking helper. Do not add a
+new chunk format until a backend requires one and tests cover the contract.
+
+Embedding or retrieval backend:
+The first bridge remains `request-boundary` and `IndexBacked=false`. It should
+not download models, run embeddings, persist vectors, or require network
+access. A future embedding adapter must name its model path, index path,
+cleanup rules, and validation command before source changes.
+
+Generated local artifacts:
+No corpus, index, embedding cache, crawl output, model file, openFrameworks
+build output, or sample media dump should be committed. Generated runtime data
+belongs under user-selected paths outside git-tracked addon content, or under
+ignored example build/cache folders when an example owns cleanup.
+
+Citation output:
+Loaded documents should preserve stable source paths and byte offsets through
+chunking. Citation labels should continue to come from `citationFromChunk(...)`
+unless a later adapter defines a tested source-label mapping.
+
+Out of scope:
+Web crawling, persistent indexes, vector search, reranking models, llama.cpp
+generation, generic agent loops, Core reverse dependencies, and reusable CI
+policy.
+
+Validation:
+Use `scripts\validate-local.ps1` for the full local handoff. Focused helper
+changes should also pass `scripts\test-addon.bat`. Runtime-smoke output should
+continue to report the bridge truthfully until a real model or index backend
+exists.

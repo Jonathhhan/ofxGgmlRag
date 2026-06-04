@@ -1,3 +1,18 @@
 # ofxGgmlRagSearchExample
 
-Root-level smoke example for `ofxGgmlRag`. It keeps the first workflow intentionally small while the real backend integration is planned.
+Root-level smoke example for `ofxGgmlRag`. It keeps the first workflow
+intentionally small while model-backed and index-backed integrations are
+planned.
+
+By default, the ImGui panel runs a deterministic in-memory retrieval request.
+Use the query, source-root, top-k, context, and run controls to inspect a local
+text corpus. To prefill user-provided local text files, set:
+
+```powershell
+$env:OFXGGML_RAG_QUERY = "citation memory"
+$env:OFXGGML_RAG_SOURCE_ROOT = "C:\path\to\notes"
+```
+
+The source-root bridge uses `ofxGgmlRagUtils::retrieveTextCorpus(...)` to read
+supported `.md` and `.txt` files and run deterministic retrieval. It does not
+create indexes, download models, run embeddings, or write generated artifacts.

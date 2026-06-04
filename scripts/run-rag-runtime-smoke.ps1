@@ -1,6 +1,8 @@
 param(
 	[string]$Configuration = "Release",
 	[string]$BuildDir = "",
+	[string]$Query = $(if ($env:OFXGGML_RAG_QUERY) { $env:OFXGGML_RAG_QUERY } else { "" }),
+	[string]$SourceRoot = $(if ($env:OFXGGML_RAG_SOURCE_ROOT) { $env:OFXGGML_RAG_SOURCE_ROOT } else { "" }),
 	[switch]$Clean,
 	[switch]$DryRun,
 	[switch]$Json,
@@ -37,12 +39,15 @@ function Test-RuntimeSmokeReady {
 
 function New-DryRunSummary {
 	$ready = Test-RuntimeSmokeReady
+	$sourceRootConfigured = ![string]::IsNullOrWhiteSpace($SourceRoot)
 	return [ordered]@{
 		Name = "ofxGgmlRag runtime smoke"
 		Root = [string]$addonRoot
 		Backend = "request-boundary"
 		BuildDir = $BuildDir
 		Ready = $ready
+		TextCorpusBridge = $sourceRootConfigured
+		SourceRootConfigured = $sourceRootConfigured
 		ModelBacked = $false
 		IndexBacked = $false
 		TestScript = $testScript
@@ -79,6 +84,39 @@ function Invoke-SmokeStep {
 	}
 }
 
+function Invoke-NativeSmokeStep {
+	param(
+		[string]$Name,
+		[string]$Executable,
+		[string[]]$Arguments
+	)
+
+	$output = @()
+	$exitCode = 0
+	try {
+		$output = & $Executable @Arguments 2>&1 | ForEach-Object { "$_" }
+		$exitCode = $LASTEXITCODE
+	} catch {
+		$output += "$_"
+		$exitCode = 1
+	}
+
+	return [ordered]@{
+		Name = $Name
+		Passed = ($exitCode -eq 0)
+		ExitCode = $exitCode
+		Output = $output
+	}
+}
+
+function Get-TestExecutable {
+	$windowsPath = Join-Path $BuildDir "ofxGgmlRag_tests.exe"
+	if (Test-Path -LiteralPath $windowsPath -PathType Leaf) {
+		return $windowsPath
+	}
+	return (Join-Path $BuildDir "ofxGgmlRag_tests")
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $addonRoot = Resolve-Path (Join-Path $scriptRoot "..")
 $addonsRoot = Split-Path -Parent $addonRoot
@@ -100,6 +138,8 @@ if ($DryRun) {
 	Write-Host "  Backend: $($summary.Backend)"
 	Write-Host "  BuildDir: $($summary.BuildDir)"
 	Write-Host "  Ready: $($summary.Ready)"
+	Write-Host "  TextCorpusBridge: $($summary.TextCorpusBridge)"
+	Write-Host "  SourceRootConfigured: $($summary.SourceRootConfigured)"
 	Write-Host "  ModelBacked: $($summary.ModelBacked)"
 	Write-Host "  IndexBacked: $($summary.IndexBacked)"
 	Write-Host "  Test: $($summary.TestScript)"
@@ -133,9 +173,25 @@ $doctorArgs = @(
 	$doctorScript,
 	"-Json"
 )
+if (![string]::IsNullOrWhiteSpace($Query)) {
+	$doctorArgs += "-Query"
+	$doctorArgs += $Query
+}
+if (![string]::IsNullOrWhiteSpace($SourceRoot)) {
+	$doctorArgs += "-SourceRoot"
+	$doctorArgs += $SourceRoot
+}
 
 $results = @()
 $results += Invoke-SmokeStep -Name "request helper tests" -Arguments $testArgs
+if (![string]::IsNullOrWhiteSpace($SourceRoot)) {
+	$corpusQuery = $(if (![string]::IsNullOrWhiteSpace($Query)) { $Query } else { "citation memory" })
+	$testExecutable = Get-TestExecutable
+	$results += Invoke-NativeSmokeStep `
+		-Name "text corpus retrieval" `
+		-Executable $testExecutable `
+		-Arguments @("--corpus-smoke", "--query", $corpusQuery, "--source-root", $SourceRoot, "--json")
+}
 $results += Invoke-SmokeStep -Name "RAG doctor" -Arguments $doctorArgs
 
 $failed = @($results | Where-Object { -not $_.Passed })
@@ -146,6 +202,8 @@ $summary = [ordered]@{
 	Backend = "request-boundary"
 	Configuration = $Configuration
 	BuildDir = $BuildDir
+	TextCorpusBridge = (![string]::IsNullOrWhiteSpace($SourceRoot))
+	SourceRootConfigured = (![string]::IsNullOrWhiteSpace($SourceRoot))
 	ModelBacked = $false
 	IndexBacked = $false
 	ResultCount = $results.Count
@@ -172,6 +230,8 @@ if ($Json) {
 	}
 	Write-Step "ofxGgmlRag runtime smoke summary"
 	Write-Host "  Backend: $($summary.Backend)"
+	Write-Host "  TextCorpusBridge: $($summary.TextCorpusBridge)"
+	Write-Host "  SourceRootConfigured: $($summary.SourceRootConfigured)"
 	Write-Host "  ModelBacked: $($summary.ModelBacked)"
 	Write-Host "  IndexBacked: $($summary.IndexBacked)"
 	Write-Host "  Passed: $($summary.Passed)"

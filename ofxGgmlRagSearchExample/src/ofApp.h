@@ -10,7 +10,16 @@ public:
 	void draw() override;
 
 private:
-	ofxGgmlRagRequest request;
+	void runRetrieval();
+
+	std::string queryInput;
+	std::string sourceRootInput;
 	std::string status;
+	std::string report;
+	ofxGgmlRagRetrieval retrieval;
+	ofxGgmlRagRetrievalOptions retrievalOptions;
+	bool useBuiltInDocument = false;
+	bool includeContext = true;
+	int topK = 3;
 	ofxImGui::Gui gui;
 };

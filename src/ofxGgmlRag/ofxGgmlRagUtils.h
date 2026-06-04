@@ -13,6 +13,9 @@ namespace ofxGgmlRagUtils {
 	ofxGgmlRagValidation validate(const ofxGgmlRagRequest & request);
 	std::vector<std::string> normalizedTags(const ofxGgmlRagRequest & request);
 	std::string describe(const ofxGgmlRagRequest & request);
+	ofxGgmlRagCorpus loadTextCorpus(
+		const std::string & sourceRoot,
+		const ofxGgmlRagCorpusOptions & options = ofxGgmlRagCorpusOptions());
 	std::vector<ofxGgmlRagChunk> chunkText(
 		const std::string & source,
 		const std::string & text,
@@ -36,6 +39,10 @@ namespace ofxGgmlRagUtils {
 		const ofxGgmlRagRequest & request,
 		const std::vector<ofxGgmlRagDocument> & documents,
 		const ofxGgmlRagRetrievalOptions & options = ofxGgmlRagRetrievalOptions());
+	ofxGgmlRagRetrieval retrieveTextCorpus(
+		const ofxGgmlRagRequest & request,
+		const ofxGgmlRagCorpusOptions & corpusOptions = ofxGgmlRagCorpusOptions(),
+		const ofxGgmlRagRetrievalOptions & retrievalOptions = ofxGgmlRagRetrievalOptions());
 	std::string formatCitation(const ofxGgmlRagCitation & citation);
 	std::vector<std::string> referencesFromCitations(const std::vector<ofxGgmlRagCitation> & citations);
 	std::string formatReferences(const std::vector<std::string> & references);

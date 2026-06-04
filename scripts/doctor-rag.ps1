@@ -85,6 +85,24 @@ function Test-ConfiguredDirectory {
 	return New-Check "WARN" $Name "configured path was not found: $expanded"
 }
 
+function Get-TextCorpusSummary {
+	param([string]$Path)
+	$expanded = [Environment]::ExpandEnvironmentVariables($Path)
+	if ([string]::IsNullOrWhiteSpace($expanded) -or !(Test-Path -LiteralPath $expanded -PathType Container)) {
+		return $null
+	}
+
+	$supportedExtensions = @(".md", ".txt")
+	$files = @(Get-ChildItem -LiteralPath $expanded -Recurse -File -ErrorAction SilentlyContinue)
+	$supported = @($files | Where-Object { $supportedExtensions -contains $_.Extension.ToLowerInvariant() })
+	return [pscustomobject]@{
+		FileCount = $files.Count
+		SupportedFileCount = $supported.Count
+		SkippedFileCount = [Math]::Max(0, $files.Count - $supported.Count)
+		Extensions = $supportedExtensions -join ", "
+	}
+}
+
 function Test-ForbiddenPath {
 	param([string]$RelativePath)
 	$path = Join-Path $addonRoot $RelativePath
@@ -147,6 +165,15 @@ $checks += Test-ConfiguredDirectory `
 	-Path $SourceRoot `
 	-Name "RAG source root" `
 	-Hint "set OFXGGML_RAG_SOURCE_ROOT or pass -SourceRoot"
+
+$corpusSummary = Get-TextCorpusSummary -Path $SourceRoot
+if ($null -ne $corpusSummary) {
+	if ($corpusSummary.SupportedFileCount -gt 0) {
+		$checks += New-Check "OK" "RAG text corpus" "$($corpusSummary.SupportedFileCount) supported text file(s), $($corpusSummary.SkippedFileCount) skipped; extensions: $($corpusSummary.Extensions)"
+	} else {
+		$checks += New-Check "WARN" "RAG text corpus" "source root contains no supported text files; extensions: $($corpusSummary.Extensions)"
+	}
+}
 
 $checks += Test-ConfiguredFile `
 	-Path $Index `
