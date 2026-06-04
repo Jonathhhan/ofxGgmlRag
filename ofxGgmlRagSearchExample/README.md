@@ -20,6 +20,8 @@ create indexes, download models, run embeddings, or write generated artifacts.
 The `LLM Prompt` tab shows the citation-grounded prompt that a future local
 model backend should answer from. The `Answer Draft` tab shows the current
 extractive citation-backed answer preview without claiming model generation.
+The `Citations` tab shows exact local quote candidates with confidence and
+source diversity metrics.
 
 `config.make` keeps ofxImGui on openFrameworks event-listener mode for this
 example (`OFXIMGUI_GLFW_EVENTS_REPLACE_OF_CALLBACKS=0`).

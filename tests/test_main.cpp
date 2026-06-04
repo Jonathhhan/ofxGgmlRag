@@ -423,6 +423,76 @@ int main(int argc, char ** argv) {
 		return 1;
 	}
 
+	const std::string markdownWithFrontMatter =
+		"---\n"
+		"title: Example Page\n"
+		"slug: example-page\n"
+		"---\n"
+		"# Heading\n"
+		"Important body paragraph.\n";
+	const auto cleanedCitationMarkdown = ofxGgmlRagUtils::cleanMarkdownForCitations(markdownWithFrontMatter);
+	if (cleanedCitationMarkdown.find("title: Example Page") != std::string::npos ||
+		cleanedCitationMarkdown.find("Important body paragraph.") == std::string::npos) {
+		std::cerr << "citation markdown cleaner did not strip front matter while preserving body\n";
+		return 1;
+	}
+	const auto citationIntent = ofxGgmlRagUtils::detectCitationIntent("find citations about Formula 1 2025 calendar changes");
+	if (!citationIntent.matched || citationIntent.triggerWord != "find" ||
+		citationIntent.topic != "Formula 1 2025 calendar changes") {
+		std::cerr << "citation intent detector did not preserve numeric topics\n";
+		return 1;
+	}
+	const std::string quoteContent =
+		"First sentence establishes the claim with enough detail to matter. "
+		"Second sentence adds supporting context and a concrete example from the source text. "
+		"Third sentence finishes the evidence span without changing wording or dropping nuance.";
+	const auto quoteCandidates = ofxGgmlRagUtils::extractQuoteCandidates(quoteContent);
+	if (std::find(quoteCandidates.begin(), quoteCandidates.end(), quoteContent) == quoteCandidates.end()) {
+		std::cerr << "citation quote extraction did not preserve longer evidence spans\n";
+		return 1;
+	}
+	if (ofxGgmlRagUtils::sourceCredibility("https://stanford.edu/research/paper") <=
+		ofxGgmlRagUtils::sourceCredibility("https://random.com/blog")) {
+		std::cerr << "citation source credibility did not favor academic sources\n";
+		return 1;
+	}
+	std::vector<ofxGgmlRagDocument> citationDocuments = {
+		{
+			"https://stanford.edu/research/rag",
+			"Retrieval augmented generation grounds answers in cited source passages. "
+			"Citation memory keeps exact local evidence available for later review.",
+			{ "citation" },
+			0.9
+		},
+		{
+			"https://random.com/blog",
+			"Cooking notes mention basil and pasta without discussing retrieval evidence.",
+			{ "blog" },
+			0.1
+		}
+	};
+	ofxGgmlRagCitationSearchOptions citationOptions;
+	citationOptions.maxCitations = 2;
+	const auto citationSearch = ofxGgmlRagUtils::findCitations("citation memory retrieval evidence", citationDocuments, citationOptions);
+	if (!citationSearch ||
+		citationSearch.citations.empty() ||
+		citationSearch.citations[0].sourceIndex != 1 ||
+		!citationSearch.citations[0].isExactMatch ||
+		citationSearch.citations[0].confidenceScore <= 0.0 ||
+		citationSearch.averageConfidence <= 0.0 ||
+		citationSearch.sourceDiversityScore <= 0.0) {
+		std::cerr << "local citation search did not rank exact cited evidence\n";
+		return 1;
+	}
+	const auto citationFromInput = ofxGgmlRagUtils::findCitationsFromInput(
+		"quote evidence on citation memory retrieval evidence",
+		citationDocuments,
+		citationOptions);
+	if (!citationFromInput || citationFromInput.inputTriggerWord != "quote") {
+		std::cerr << "citation search did not run from intercepted user input\n";
+		return 1;
+	}
+
 	ofxGgmlRagSearchHit excerptHit;
 	excerptHit.chunk.source = "docs/excerpt.md";
 	excerptHit.chunk.index = 3;
@@ -609,7 +679,8 @@ int main(int argc, char ** argv) {
 		rag.getLastRetrieval().hits[0].chunk.source != "docs/a.md" ||
 		rag.format().find("hit[1] docs/a.md#0") == std::string::npos ||
 		rag.buildPrompt().prompt.find("Question:\ncitation memory") == std::string::npos ||
-		rag.draftAnswer().text.find("Extractive answer draft for: citation memory") == std::string::npos) {
+		rag.draftAnswer().text.find("Extractive answer draft for: citation memory") == std::string::npos ||
+		!rag.findCitations()) {
 		std::cerr << "ofxGgmlRag facade did not search in-memory documents\n";
 		return 1;
 	}

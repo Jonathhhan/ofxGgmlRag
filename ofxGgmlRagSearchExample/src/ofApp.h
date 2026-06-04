@@ -19,6 +19,7 @@ private:
 	std::string report;
 	std::string promptText;
 	std::string answerText;
+	std::string citationsText;
 	ofxGgmlRag rag;
 	bool useBuiltInDocument = false;
 	bool includeContext = true;

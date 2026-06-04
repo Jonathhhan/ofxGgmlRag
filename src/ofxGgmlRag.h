@@ -45,6 +45,14 @@ public:
 	std::string formatJson(const ofxGgmlRagReportOptions & options = ofxGgmlRagReportOptions()) const;
 	ofxGgmlRagPrompt buildPrompt(const ofxGgmlRagPromptOptions & options = ofxGgmlRagPromptOptions()) const;
 	ofxGgmlRagAnswer draftAnswer(const ofxGgmlRagAnswerOptions & options = ofxGgmlRagAnswerOptions()) const;
+	ofxGgmlRagCitationSearchResult findCitations(
+		const ofxGgmlRagCitationSearchOptions & options = ofxGgmlRagCitationSearchOptions()) const;
+	ofxGgmlRagCitationSearchResult findCitations(
+		const std::string & topic,
+		const ofxGgmlRagCitationSearchOptions & options = ofxGgmlRagCitationSearchOptions()) const;
+	ofxGgmlRagCitationSearchResult findCitationsFromInput(
+		const std::string & input,
+		const ofxGgmlRagCitationSearchOptions & options = ofxGgmlRagCitationSearchOptions()) const;
 
 private:
 	ofxGgmlRagRequest request;

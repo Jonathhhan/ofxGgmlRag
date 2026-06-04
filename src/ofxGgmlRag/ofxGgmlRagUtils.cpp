@@ -11,6 +11,7 @@
 #include <limits>
 #include <sstream>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace ofxGgmlRagUtils {
@@ -94,6 +95,119 @@ namespace ofxGgmlRagUtils {
 
 		double ClampUnit(double value) {
 			return std::max(0.0, std::min(1.0, value));
+		}
+
+		std::string NormalizeEvidenceText(const std::string & text) {
+			std::string normalized;
+			normalized.reserve(text.size());
+			bool lastWasSpace = false;
+			for (const auto ch : text) {
+				const auto byte = static_cast<unsigned char>(ch);
+				if (IsWhitespace(ch)) {
+					if (!lastWasSpace) {
+						normalized.push_back(' ');
+						lastWasSpace = true;
+					}
+					continue;
+				}
+				lastWasSpace = false;
+				normalized.push_back(ToLowerAscii(static_cast<char>(byte)));
+			}
+			return trim(normalized);
+		}
+
+		std::string StripCitationLeadIn(std::string value) {
+			static const std::unordered_set<std::string> fillerWords = {
+				"for", "about", "on", "regarding", "re", "related", "to", "the",
+				"some", "any", "relevant", "supporting", "citation", "citations",
+				"cite", "source", "sources", "quote", "quotes", "evidence"
+			};
+			value = trim(value);
+			std::size_t start = 0;
+			while (start < value.size()) {
+				while (start < value.size() && !IsTokenChar(value[start])) {
+					++start;
+				}
+				auto end = start;
+				while (end < value.size() && IsTokenChar(value[end])) {
+					++end;
+				}
+				if (end == start) {
+					break;
+				}
+				const auto word = LowerAscii(value.substr(start, end - start));
+				if (fillerWords.find(word) == fillerWords.end()) {
+					break;
+				}
+				start = end;
+			}
+			auto stripped = trim(value.substr(start));
+			while (!stripped.empty() && !std::isalnum(static_cast<unsigned char>(stripped.back()))) {
+				stripped.pop_back();
+			}
+			return trim(stripped);
+		}
+
+		std::vector<std::string> TopicTerms(const std::string & topic) {
+			std::vector<std::string> terms;
+			for (const auto & term : tokenize(topic)) {
+				if (term.size() >= 3 && StopWords().find(term) == StopWords().end()) {
+					terms.push_back(term);
+				}
+			}
+			return terms;
+		}
+
+		double ScoreQuoteCandidate(
+			const std::string & quote,
+			const std::string & label,
+			const std::string & uri,
+			const std::string & topic,
+			const std::vector<std::string> & terms) {
+			const auto normalizedQuote = NormalizeEvidenceText(quote);
+			const auto normalizedTopic = NormalizeEvidenceText(topic);
+			const auto normalizedLabel = NormalizeEvidenceText(label);
+			const auto normalizedUri = NormalizeEvidenceText(uri);
+			if (normalizedQuote.empty()) {
+				return 0.0;
+			}
+
+			double score = 0.0;
+			if (!normalizedTopic.empty() && normalizedQuote.find(normalizedTopic) != std::string::npos) {
+				score += 5.0;
+			}
+			for (const auto & term : terms) {
+				if (normalizedQuote.find(term) != std::string::npos) {
+					score += 1.0;
+				}
+				if (!normalizedLabel.empty() && normalizedLabel.find(term) != std::string::npos) {
+					score += 0.75;
+				}
+				if (!normalizedUri.empty() && normalizedUri.find(term) != std::string::npos) {
+					score += 0.35;
+				}
+			}
+			if (normalizedQuote.size() >= 40 && normalizedQuote.size() <= 420) {
+				score += 0.5;
+			}
+			if (quote.find('\n') != std::string::npos) {
+				score += 0.2;
+			}
+			if (quote.find('"') != std::string::npos) {
+				score += 0.15;
+			}
+			return score;
+		}
+
+		void FinalizeCitationStats(ofxGgmlRagCitationSearchResult & result) {
+			result.sourceDiversityScore = sourceDiversityScore(result.citations);
+			double totalConfidence = 0.0;
+			for (const auto & citation : result.citations) {
+				totalConfidence += citation.confidenceScore;
+			}
+			result.averageConfidence = result.citations.empty()
+				? 0.0
+				: totalConfidence / static_cast<double>(result.citations.size());
 		}
 
 		std::vector<std::string> NormalizeTags(const std::vector<std::string> & input) {
@@ -773,6 +887,398 @@ namespace ofxGgmlRagUtils {
 			hits.resize(options.topK);
 		}
 		return hits;
+	}
+
+	std::string cleanMarkdownForCitations(const std::string & markdown) {
+		std::vector<std::string> lines;
+		std::istringstream reader(markdown);
+		std::string line;
+		while (std::getline(reader, line)) {
+			lines.push_back(line);
+		}
+
+		bool frontMatter = !lines.empty() && trim(lines.front()) == "---";
+		if (frontMatter) {
+			bool metadata = false;
+			for (std::size_t i = 1; i < lines.size(); ++i) {
+				const auto cleaned = trim(lines[i]);
+				if (cleaned.empty()) {
+					continue;
+				}
+				if (cleaned == "---") {
+					frontMatter = metadata;
+					break;
+				}
+				if (cleaned.find(':') != std::string::npos) {
+					metadata = true;
+				}
+			}
+		}
+
+		std::ostringstream cleaned;
+		bool inFrontMatter = frontMatter;
+		bool previousWasBlank = true;
+		bool sawBody = false;
+		const std::unordered_set<std::string> stopHeadings = {
+			"references", "citations", "bibliography", "external links", "navigation menu"
+		};
+
+		for (const auto & rawLine : lines) {
+			const auto text = trim(rawLine);
+			if (inFrontMatter) {
+				if (text == "---" && sawBody) {
+					inFrontMatter = false;
+				}
+				if (!sawBody) {
+					sawBody = true;
+				}
+				continue;
+			}
+			if (!text.empty() && text.front() == '#') {
+				auto heading = text;
+				while (!heading.empty() && heading.front() == '#') {
+					heading.erase(heading.begin());
+				}
+				if (stopHeadings.find(NormalizeEvidenceText(heading)) != stopHeadings.end()) {
+					break;
+				}
+			}
+			if (text == "contents" || text == "toc" || text == "menu" || text == "navigation") {
+				continue;
+			}
+			if (text.empty()) {
+				if (!previousWasBlank) {
+					cleaned << "\n\n";
+				}
+				previousWasBlank = true;
+				continue;
+			}
+			if (!previousWasBlank) {
+				cleaned << "\n";
+			}
+			cleaned << text;
+			previousWasBlank = false;
+		}
+
+		const auto output = trim(cleaned.str());
+		return output.empty() ? trim(markdown) : output;
+	}
+
+	ofxGgmlRagCitationSearchInputMatch detectCitationIntent(
+		const std::string & input,
+		const ofxGgmlRagCitationSearchInputSettings & settings) {
+		ofxGgmlRagCitationSearchInputMatch match;
+		const auto cleaned = trim(input);
+		const auto lowered = LowerAscii(cleaned);
+		std::size_t bestFound = std::string::npos;
+		std::string bestTrigger;
+		std::string bestTopic;
+		for (const auto & trigger : settings.triggerWords) {
+			const auto normalizedTrigger = LowerAscii(trim(trigger));
+			if (normalizedTrigger.empty()) {
+				continue;
+			}
+			std::size_t searchFrom = 0;
+			while (searchFrom < lowered.size()) {
+				const auto found = lowered.find(normalizedTrigger, searchFrom);
+				if (found == std::string::npos) {
+					break;
+				}
+				const auto leftOk = found == 0 || !IsTokenChar(lowered[found - 1]);
+				const auto right = found + normalizedTrigger.size();
+				const auto rightOk = right >= lowered.size() || !IsTokenChar(lowered[right]);
+				if (leftOk && rightOk) {
+					const auto topic = StripCitationLeadIn(cleaned.substr(right));
+					if (topic.size() >= settings.minTopicLength && found < bestFound) {
+						bestFound = found;
+						bestTrigger = normalizedTrigger;
+						bestTopic = topic;
+					}
+				}
+				searchFrom = found + normalizedTrigger.size();
+			}
+		}
+		if (bestFound != std::string::npos) {
+			match.matched = true;
+			match.triggerWord = bestTrigger;
+			match.topic = bestTopic;
+		}
+		return match;
+	}
+
+	std::vector<std::string> extractQuoteCandidates(const std::string & text) {
+		std::vector<std::string> candidates;
+		const auto cleaned = trim(text);
+		if (cleaned.empty()) {
+			return candidates;
+		}
+		auto appendCandidate = [&candidates](std::string candidate) {
+			candidate = trim(candidate);
+			if (candidate.size() < 24 || candidate.size() > 1100) {
+				return;
+			}
+			candidates.push_back(candidate);
+		};
+
+		std::istringstream paragraphReader(cleaned);
+		std::ostringstream paragraph;
+		std::string line;
+		auto flushParagraph = [&]() {
+			const auto value = trim(paragraph.str());
+			if (!value.empty()) {
+				appendCandidate(value);
+			}
+			paragraph.str("");
+			paragraph.clear();
+		};
+		while (std::getline(paragraphReader, line)) {
+			const auto trimmedLine = trim(line);
+			if (trimmedLine.empty()) {
+				flushParagraph();
+				continue;
+			}
+			if (!paragraph.str().empty()) {
+				paragraph << " ";
+			}
+			paragraph << trimmedLine;
+		}
+		flushParagraph();
+
+		std::vector<std::string> sentences;
+		std::size_t start = 0;
+		auto pushSentence = [&](std::size_t endExclusive) {
+			if (endExclusive <= start) {
+				return;
+			}
+			auto candidate = trim(cleaned.substr(start, endExclusive - start));
+			start = endExclusive;
+			if (candidate.size() >= 24 && candidate.size() <= 900) {
+				sentences.push_back(candidate);
+			}
+		};
+		for (std::size_t i = 0; i < cleaned.size(); ++i) {
+			const auto ch = cleaned[i];
+			if ((ch == '.' || ch == '!' || ch == '?' || ch == '\n') &&
+				(i + 1 == cleaned.size() || IsWhitespace(cleaned[i + 1]))) {
+				pushSentence(i + 1);
+			}
+		}
+		pushSentence(cleaned.size());
+
+		for (const auto & sentence : sentences) {
+			appendCandidate(sentence);
+		}
+		for (std::size_t i = 0; i + 1 < sentences.size(); ++i) {
+			appendCandidate(sentences[i] + " " + sentences[i + 1]);
+		}
+		for (std::size_t i = 0; i + 2 < sentences.size(); ++i) {
+			appendCandidate(sentences[i] + " " + sentences[i + 1] + " " + sentences[i + 2]);
+		}
+
+		std::unordered_set<std::string> seen;
+		std::vector<std::string> deduped;
+		for (const auto & candidate : candidates) {
+			const auto normalized = NormalizeEvidenceText(candidate);
+			if (!normalized.empty() && seen.insert(normalized).second) {
+				deduped.push_back(candidate);
+			}
+		}
+		return deduped;
+	}
+
+	double sourceCredibility(const std::string & sourceUri) {
+		const auto lower = LowerAscii(sourceUri);
+		double credibility = 0.5;
+		if (lower.find(".edu") != std::string::npos) {
+			credibility += 0.3;
+		}
+		if (lower.find(".gov") != std::string::npos) {
+			credibility += 0.3;
+		}
+		if (lower.find(".org") != std::string::npos) {
+			credibility += 0.15;
+		}
+		if (lower.find("wikipedia.org") != std::string::npos) {
+			credibility += 0.2;
+		}
+		if (lower.find("github.com") != std::string::npos) {
+			credibility += 0.15;
+		}
+		if (lower.find("arxiv.org") != std::string::npos) {
+			credibility += 0.25;
+		}
+		if (lower.find("ieee.org") != std::string::npos || lower.find("acm.org") != std::string::npos) {
+			credibility += 0.25;
+		}
+		return ClampUnit(credibility);
+	}
+
+	double confidenceScore(
+		const ofxGgmlRagCitationItem & item,
+		bool isExactMatch,
+		double relevanceScore,
+		double sourceCredibilityValue) {
+		double confidence = isExactMatch ? 0.4 : 0.15;
+		confidence += ClampUnit(relevanceScore) * 0.35;
+		confidence += ClampUnit(sourceCredibilityValue) * 0.25;
+		const auto length = item.quote.size();
+		if (length >= 30 && length <= 500) {
+			confidence += 0.05;
+		} else if (length > 500 && length <= 800) {
+			confidence += 0.03;
+		}
+		if (!item.note.empty()) {
+			confidence += 0.02;
+		}
+		return ClampUnit(confidence);
+	}
+
+	double sourceDiversityScore(const std::vector<ofxGgmlRagCitationItem> & citations) {
+		if (citations.empty()) {
+			return 0.0;
+		}
+		std::unordered_map<int, std::size_t> counts;
+		for (const auto & citation : citations) {
+			if (citation.sourceIndex > 0) {
+				++counts[citation.sourceIndex];
+			}
+		}
+		if (counts.empty()) {
+			return 0.0;
+		}
+		const auto uniqueSources = counts.size();
+		const auto total = citations.size();
+		const auto diversity = static_cast<double>(uniqueSources) / static_cast<double>(std::max<std::size_t>(total, 1));
+		double evenness = 0.0;
+		if (uniqueSources > 1) {
+			const auto ideal = static_cast<double>(total) / static_cast<double>(uniqueSources);
+			double deviation = 0.0;
+			for (const auto & pair : counts) {
+				deviation += std::abs(static_cast<double>(pair.second) - ideal);
+			}
+			evenness = 1.0 - (deviation / (static_cast<double>(total) * static_cast<double>(uniqueSources)));
+		}
+		return ClampUnit((diversity * 0.6) + (evenness * 0.4));
+	}
+
+	ofxGgmlRagCitationSearchResult findCitations(
+		const std::string & topic,
+		const std::vector<ofxGgmlRagDocument> & documents,
+		const ofxGgmlRagCitationSearchOptions & options) {
+		ofxGgmlRagCitationSearchResult result;
+		result.topic = trim(topic);
+		if (result.topic.empty()) {
+			result.error = "citation topic is empty";
+			return result;
+		}
+		if (result.topic.size() < 3) {
+			result.error = "citation topic is too short";
+			return result;
+		}
+		if (documents.empty()) {
+			result.error = "no citation documents";
+			return result;
+		}
+		if (options.maxCitations == 0) {
+			result.error = "maxCitations must be at least 1";
+			return result;
+		}
+		if (options.minimumConfidence < 0.0 || options.minimumConfidence > 1.0) {
+			result.error = "minimumConfidence must be between 0.0 and 1.0";
+			return result;
+		}
+
+		struct RankedCitation {
+			double score = 0.0;
+			ofxGgmlRagCitationItem item;
+		};
+		const auto terms = TopicTerms(result.topic);
+		std::vector<RankedCitation> ranked;
+		for (std::size_t sourceIndex = 0; sourceIndex < documents.size(); ++sourceIndex) {
+			const auto & document = documents[sourceIndex];
+			const auto text = options.cleanMarkdown
+				? cleanMarkdownForCitations(document.text)
+				: trim(document.text);
+			if (text.empty()) {
+				continue;
+			}
+			for (const auto & quote : extractQuoteCandidates(text)) {
+				const auto relevance = ScoreQuoteCandidate(quote, document.source, document.source, result.topic, terms);
+				if (relevance <= 0.0) {
+					continue;
+				}
+				RankedCitation candidate;
+				candidate.score = relevance;
+				candidate.item.quote = quote;
+				candidate.item.note = "Exact local source span.";
+				candidate.item.sourceLabel = document.source.empty()
+					? ("Source " + std::to_string(sourceIndex + 1))
+					: document.source;
+				candidate.item.sourceUri = document.source;
+				candidate.item.sourceIndex = static_cast<int>(sourceIndex + 1);
+				candidate.item.isExactMatch = true;
+				candidate.item.relevanceScore = ClampUnit(relevance / 10.0);
+				candidate.item.sourceCredibility = sourceCredibility(document.source);
+				candidate.item.confidenceScore = confidenceScore(
+					candidate.item,
+					true,
+					candidate.item.relevanceScore,
+					candidate.item.sourceCredibility);
+				ranked.push_back(candidate);
+			}
+		}
+
+		std::sort(ranked.begin(), ranked.end(), [](const RankedCitation & left, const RankedCitation & right) {
+			if (left.item.confidenceScore != right.item.confidenceScore) {
+				return left.item.confidenceScore > right.item.confidenceScore;
+			}
+			if (left.score != right.score) {
+				return left.score > right.score;
+			}
+			return left.item.quote.size() < right.item.quote.size();
+		});
+
+		std::unordered_set<std::string> seen;
+		std::unordered_map<int, std::size_t> sourceCounts;
+		for (const auto & candidate : ranked) {
+			if (candidate.item.confidenceScore < options.minimumConfidence) {
+				continue;
+			}
+			if (sourceCounts[candidate.item.sourceIndex] >= options.maxQuotesPerSource) {
+				continue;
+			}
+			const auto key = NormalizeEvidenceText(candidate.item.quote) + "\n---\n" + candidate.item.sourceUri;
+			if (!seen.insert(key).second) {
+				continue;
+			}
+			++sourceCounts[candidate.item.sourceIndex];
+			result.citations.push_back(candidate.item);
+			if (result.citations.size() >= options.maxCitations) {
+				break;
+			}
+		}
+		FinalizeCitationStats(result);
+		result.success = !result.citations.empty();
+		if (!result.success) {
+			result.error = "no citation candidates";
+		}
+		return result;
+	}
+
+	ofxGgmlRagCitationSearchResult findCitationsFromInput(
+		const std::string & input,
+		const std::vector<ofxGgmlRagDocument> & documents,
+		const ofxGgmlRagCitationSearchOptions & options,
+		const ofxGgmlRagCitationSearchInputSettings & inputSettings) {
+		const auto match = detectCitationIntent(input, inputSettings);
+		ofxGgmlRagCitationSearchResult result;
+		if (!match.matched) {
+			result.error = "input did not request citations";
+			return result;
+		}
+		result = findCitations(match.topic, documents, options);
+		result.inputTriggerWord = match.triggerWord;
+		return result;
 	}
 
 	std::string excerptForHit(

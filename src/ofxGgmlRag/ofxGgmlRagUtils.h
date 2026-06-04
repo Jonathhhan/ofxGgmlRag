@@ -32,6 +32,27 @@ namespace ofxGgmlRagUtils {
 		const std::vector<float> & queryEmbedding,
 		const std::vector<ofxGgmlRagEmbeddedChunk> & chunks,
 		const ofxGgmlRagVectorSearchOptions & options = ofxGgmlRagVectorSearchOptions());
+	std::string cleanMarkdownForCitations(const std::string & markdown);
+	ofxGgmlRagCitationSearchInputMatch detectCitationIntent(
+		const std::string & input,
+		const ofxGgmlRagCitationSearchInputSettings & settings = ofxGgmlRagCitationSearchInputSettings());
+	std::vector<std::string> extractQuoteCandidates(const std::string & text);
+	double sourceCredibility(const std::string & sourceUri);
+	double confidenceScore(
+		const ofxGgmlRagCitationItem & item,
+		bool isExactMatch,
+		double relevanceScore,
+		double sourceCredibility);
+	double sourceDiversityScore(const std::vector<ofxGgmlRagCitationItem> & citations);
+	ofxGgmlRagCitationSearchResult findCitations(
+		const std::string & topic,
+		const std::vector<ofxGgmlRagDocument> & documents,
+		const ofxGgmlRagCitationSearchOptions & options = ofxGgmlRagCitationSearchOptions());
+	ofxGgmlRagCitationSearchResult findCitationsFromInput(
+		const std::string & input,
+		const std::vector<ofxGgmlRagDocument> & documents,
+		const ofxGgmlRagCitationSearchOptions & options = ofxGgmlRagCitationSearchOptions(),
+		const ofxGgmlRagCitationSearchInputSettings & inputSettings = ofxGgmlRagCitationSearchInputSettings());
 	std::string excerptForHit(
 		const ofxGgmlRagSearchHit & hit,
 		const ofxGgmlRagExcerptOptions & options = ofxGgmlRagExcerptOptions());

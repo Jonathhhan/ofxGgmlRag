@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <sstream>
 
 namespace {
 	std::string GetEnvText(const char * name) {
@@ -62,6 +63,24 @@ namespace {
 		}
 		return variants;
 	}
+
+	std::string FormatCitationSearch(const ofxGgmlRagCitationSearchResult & result) {
+		if (!result) {
+			return result.error;
+		}
+		std::ostringstream out;
+		out << "citations=" << result.citations.size()
+			<< " averageConfidence=" << result.averageConfidence
+			<< " sourceDiversity=" << result.sourceDiversityScore << "\n\n";
+		for (std::size_t i = 0; i < result.citations.size(); ++i) {
+			const auto & citation = result.citations[i];
+			out << "[" << (i + 1) << "] " << citation.sourceLabel
+				<< " confidence=" << citation.confidenceScore
+				<< " relevance=" << citation.relevanceScore << "\n"
+				<< citation.quote << "\n\n";
+		}
+		return out.str();
+	}
 }
 
 void ofApp::setup() {
@@ -102,6 +121,7 @@ void ofApp::runRetrieval() {
 	promptText = prompt ? prompt.prompt : prompt.error;
 	const auto answer = rag.draftAnswer();
 	answerText = answer ? answer.text : answer.error;
+	citationsText = FormatCitationSearch(rag.findCitations());
 	if (useBuiltInDocument) {
 		status += "; using built-in documents";
 	}
@@ -154,6 +174,12 @@ void ofApp::draw() {
 			if (ImGui::BeginTabItem("Answer Draft")) {
 				ImGui::BeginChild("answer", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
 				ImGui::TextWrapped("%s", answerText.c_str());
+				ImGui::EndChild();
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("Citations")) {
+				ImGui::BeginChild("citations", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::TextWrapped("%s", citationsText.c_str());
 				ImGui::EndChild();
 				ImGui::EndTabItem();
 			}

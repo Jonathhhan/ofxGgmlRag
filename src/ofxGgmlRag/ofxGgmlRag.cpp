@@ -160,3 +160,19 @@ ofxGgmlRagPrompt ofxGgmlRag::buildPrompt(const ofxGgmlRagPromptOptions & options
 ofxGgmlRagAnswer ofxGgmlRag::draftAnswer(const ofxGgmlRagAnswerOptions & options) const {
 	return ofxGgmlRagUtils::draftAnswer(request.query, lastRetrieval, options);
 }
+
+ofxGgmlRagCitationSearchResult ofxGgmlRag::findCitations(const ofxGgmlRagCitationSearchOptions & options) const {
+	return ofxGgmlRagUtils::findCitations(request.query, documents, options);
+}
+
+ofxGgmlRagCitationSearchResult ofxGgmlRag::findCitations(
+	const std::string & topic,
+	const ofxGgmlRagCitationSearchOptions & options) const {
+	return ofxGgmlRagUtils::findCitations(topic, documents, options);
+}
+
+ofxGgmlRagCitationSearchResult ofxGgmlRag::findCitationsFromInput(
+	const std::string & input,
+	const ofxGgmlRagCitationSearchOptions & options) const {
+	return ofxGgmlRagUtils::findCitationsFromInput(input, documents, options);
+}

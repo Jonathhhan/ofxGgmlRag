@@ -19,6 +19,9 @@
 - Ported dependency-light RAG pipeline behavior from the legacy addon shape:
   stopword-aware query refinement, query variants, source quality hints, and
   cosine/vector search helpers.
+- Added local citation search parity helpers: input intent detection, markdown
+  cleanup, exact quote extraction, confidence scoring, source credibility, and
+  source diversity metrics.
 - Extended headless tests and runtime smoke coverage with a corpus retrieval
   probe.
 - Updated `doctor-rag.ps1`, `run-rag-runtime-smoke.ps1`, and the ImGui-backed

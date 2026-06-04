@@ -23,6 +23,8 @@ Current addon API version: `1.0.1`.
 - stopword-aware query refinement and query-variant retrieval
 - source quality hints for retrieval ranking
 - cosine similarity and embedded chunk vector search helpers
+- local citation intent detection and exact-quote citation search
+- citation confidence, source credibility, and source diversity metrics
 - minimum-score retrieval filtering
 - minimum matched-term retrieval filtering
 - excluded-tag retrieval filtering
@@ -112,6 +114,12 @@ in-memory documents, tune `getRetrievalOptions()`, call `retrieve()` or
 can be handed to a future local LLM backend. Call `draftAnswer()` when you want
 an explicit extractive, citation-backed answer draft from the current retrieval
 without claiming model generation.
+
+Call `findCitations()` to extract exact local quote candidates from the loaded
+documents, ranked by topic relevance, source credibility, confidence, and source
+diversity. `findCitationsFromInput(...)` detects prompts like "find citations
+about ..." or "quote evidence on ..." before running the same local citation
+search.
 
 Pass `-SourceRoot` to `scripts\doctor-rag.ps1` to report supported local text
 corpus files before wiring an app or example to the bridge.

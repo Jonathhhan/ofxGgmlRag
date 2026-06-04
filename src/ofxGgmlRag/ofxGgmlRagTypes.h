@@ -116,6 +116,62 @@ struct ofxGgmlRagVectorSearchHit {
 	double score = 0.0;
 };
 
+struct ofxGgmlRagCitationSearchInputSettings {
+	std::vector<std::string> triggerWords = {
+		"search",
+		"find",
+		"query",
+		"citation",
+		"citations",
+		"cite",
+		"source",
+		"sources",
+		"quote",
+		"quotes",
+		"evidence"
+	};
+	std::size_t minTopicLength = 3;
+};
+
+struct ofxGgmlRagCitationSearchInputMatch {
+	bool matched = false;
+	std::string triggerWord;
+	std::string topic;
+};
+
+struct ofxGgmlRagCitationItem {
+	std::string quote;
+	std::string note;
+	std::string sourceLabel;
+	std::string sourceUri;
+	int sourceIndex = -1;
+	double confidenceScore = 0.0;
+	bool isExactMatch = false;
+	double relevanceScore = 0.0;
+	double sourceCredibility = 0.0;
+};
+
+struct ofxGgmlRagCitationSearchOptions {
+	std::size_t maxCitations = 5;
+	double minimumConfidence = 0.0;
+	std::size_t maxQuotesPerSource = 4;
+	bool cleanMarkdown = true;
+};
+
+struct ofxGgmlRagCitationSearchResult {
+	bool success = false;
+	std::string error;
+	std::string topic;
+	std::string inputTriggerWord;
+	std::vector<ofxGgmlRagCitationItem> citations;
+	double sourceDiversityScore = 0.0;
+	double averageConfidence = 0.0;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
 struct ofxGgmlRagExcerptOptions {
 	std::size_t contextChars = 80;
 	bool includeEllipses = true;
