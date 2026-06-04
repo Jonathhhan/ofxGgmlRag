@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(ofxGgmlRag_tests
 	test_main.cpp
+	../src/ofxGgmlRag/ofxGgmlRag.cpp
 	../src/ofxGgmlRag/ofxGgmlRagUtils.cpp)
 
 target_include_directories(ofxGgmlRag_tests PRIVATE

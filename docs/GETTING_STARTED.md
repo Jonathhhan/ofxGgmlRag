@@ -65,6 +65,10 @@ $env:OFXGGML_RAG_QUERY = "citation memory"
 $env:OFXGGML_RAG_SOURCE_ROOT = "C:\path\to\notes"
 ```
 
-The example uses `ofxGgmlRagUtils::retrieveTextCorpus(...)` to load supported
-local text files and run deterministic retrieval. It does not download models,
-run embeddings, create vector indexes, or write generated artifacts.
+The example uses the stateful `ofxGgmlRag` addon facade to load supported local
+text files and run deterministic retrieval. It does not download models, run
+embeddings, create vector indexes, or write generated artifacts.
+
+The example's `config.make` sets
+`OFXIMGUI_GLFW_EVENTS_REPLACE_OF_CALLBACKS=0` so ofxImGui uses
+openFrameworks event listeners with this OF build.

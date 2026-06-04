@@ -770,6 +770,62 @@ namespace ofxGgmlRagUtils {
 		return result;
 	}
 
+	ofxGgmlRagPrompt buildPrompt(
+		const std::string & query,
+		const ofxGgmlRagRetrieval & retrieval,
+		const ofxGgmlRagPromptOptions & options) {
+		ofxGgmlRagPrompt prompt;
+		prompt.question = trim(query);
+		prompt.systemInstruction = trim(options.systemInstruction);
+		prompt.context = trim(retrieval.context.text);
+		prompt.citations = retrieval.context.citations.empty() ? retrieval.result.citations : retrieval.context.citations;
+		prompt.references = retrieval.result.references;
+		prompt.truncated = retrieval.context.truncated;
+
+		if (!retrieval) {
+			prompt.error = retrieval.result.error.empty() ? "retrieval has no cited context" : retrieval.result.error;
+			return prompt;
+		}
+		if (prompt.question.empty()) {
+			prompt.error = "query is required";
+			return prompt;
+		}
+		if (prompt.context.empty()) {
+			prompt.error = "retrieval context is empty";
+			return prompt;
+		}
+
+		std::ostringstream text;
+		if (!prompt.systemInstruction.empty()) {
+			text << prompt.systemInstruction << "\n\n";
+		}
+		const auto contextHeading = trim(options.contextHeading);
+		text << (contextHeading.empty() ? "Context" : contextHeading) << ":\n";
+		text << prompt.context;
+		if (!prompt.context.empty() && prompt.context.back() != '\n') {
+			text << "\n";
+		}
+
+		if (options.includeReferences && !prompt.references.empty()) {
+			text << "\nReferences:\n" << formatReferences(prompt.references) << "\n";
+		}
+
+		const auto questionHeading = trim(options.questionHeading);
+		text << "\n" << (questionHeading.empty() ? "Question" : questionHeading) << ":\n";
+		text << prompt.question << "\n\n";
+
+		const auto answerHeading = trim(options.answerHeading);
+		text << (answerHeading.empty() ? "Answer" : answerHeading) << ":\n";
+
+		prompt.prompt = text.str();
+		if (options.maxPromptChars > 0 && prompt.prompt.size() > options.maxPromptChars) {
+			prompt.prompt.resize(options.maxPromptChars);
+			prompt.truncated = true;
+		}
+		prompt.success = true;
+		return prompt;
+	}
+
 	ofxGgmlRagRetrieval retrieve(
 		const ofxGgmlRagRequest & request,
 		const std::vector<ofxGgmlRagDocument> & documents,

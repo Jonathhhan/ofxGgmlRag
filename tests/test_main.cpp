@@ -192,6 +192,19 @@ int main(int argc, char ** argv) {
 		std::cerr << "direct text corpus retrieval did not assemble deterministic evidence\n";
 		return 1;
 	}
+	ofxGgmlRag rag;
+	rag.setRetrievalOptions(corpusRetrievalOptions);
+	const auto addonCorpusRetrieval = rag.loadAndSearch(corpus.sourceRoot, "nested memory");
+	if (!addonCorpusRetrieval ||
+		!rag.hasDocuments() ||
+		rag.getDocuments().size() != 3 ||
+		rag.getLastCorpus().stats.loadedDocumentCount != 3 ||
+		rag.getLastRetrieval().hits.size() != 1 ||
+		rag.getLastRetrieval().hits[0].chunk.source.find("nested/c.md") == std::string::npos ||
+		rag.summarize().find("rag result: ok") == std::string::npos) {
+		std::cerr << "ofxGgmlRag facade did not load and search a text corpus\n";
+		return 1;
+	}
 	corpusRequest.sourceRoot = (corpusRoot / "missing").string();
 	const auto missingTextCorpusRetrieval = ofxGgmlRagUtils::retrieveTextCorpus(corpusRequest);
 	if (missingTextCorpusRetrieval ||
@@ -421,6 +434,33 @@ int main(int argc, char ** argv) {
 		std::cerr << "context assembly did not preserve hit evidence\n";
 		return 1;
 	}
+	ofxGgmlRagRetrieval promptRetrieval;
+	promptRetrieval.result = hitResult;
+	promptRetrieval.context = context;
+	ofxGgmlRagPromptOptions promptOptions;
+	const auto prompt = ofxGgmlRagUtils::buildPrompt("workflow citation memory", promptRetrieval, promptOptions);
+	if (!prompt ||
+		prompt.prompt.find("Answer the question using only the cited context") == std::string::npos ||
+		prompt.prompt.find("Cited context:") == std::string::npos ||
+		prompt.prompt.find("References:\n[1] a.md#1") == std::string::npos ||
+		prompt.prompt.find("Question:\nworkflow citation memory") == std::string::npos ||
+		prompt.prompt.find("Answer:\n") == std::string::npos ||
+		prompt.citations.size() != 2 ||
+		prompt.references.size() != 2) {
+		std::cerr << "prompt builder did not assemble cited model handoff text\n";
+		return 1;
+	}
+	promptOptions.maxPromptChars = 48;
+	const auto truncatedPrompt = ofxGgmlRagUtils::buildPrompt("workflow citation memory", promptRetrieval, promptOptions);
+	if (!truncatedPrompt || !truncatedPrompt.truncated || truncatedPrompt.prompt.size() != 48) {
+		std::cerr << "prompt builder did not honor prompt character budget\n";
+		return 1;
+	}
+	const auto failedPrompt = ofxGgmlRagUtils::buildPrompt("workflow citation memory", ofxGgmlRagRetrieval(), ofxGgmlRagPromptOptions());
+	if (failedPrompt || failedPrompt.error.empty()) {
+		std::cerr << "prompt builder did not report missing retrieval context\n";
+		return 1;
+	}
 
 	contextOptions.maxChars = 48;
 	const auto truncatedContext = ofxGgmlRagUtils::contextFromHits("workflow citation memory", hits, contextOptions);
@@ -476,6 +516,19 @@ int main(int argc, char ** argv) {
 		retrieval.hits[0].chunk.tags.size() != 2 ||
 		retrieval.hits[0].chunk.tags[1] != "retrieval") {
 		std::cerr << "retrieval pipeline did not assemble deterministic evidence\n";
+		return 1;
+	}
+	rag.clear();
+	rag.setDocuments(documents, "docs");
+	rag.setRetrievalOptions(retrievalOptions);
+	const auto addonMemoryRetrieval = rag.search("citation memory");
+	if (!addonMemoryRetrieval ||
+		rag.getRequest().sourceRoot != "docs" ||
+		rag.getLastRetrieval().hits.size() != 1 ||
+		rag.getLastRetrieval().hits[0].chunk.source != "docs/a.md" ||
+		rag.format().find("hit[1] docs/a.md#0") == std::string::npos ||
+		rag.buildPrompt().prompt.find("Question:\ncitation memory") == std::string::npos) {
+		std::cerr << "ofxGgmlRag facade did not search in-memory documents\n";
 		return 1;
 	}
 	documents.push_back({ "docs/private/secret.md", "citation memory should stay out of retrieval.", { "private" } });

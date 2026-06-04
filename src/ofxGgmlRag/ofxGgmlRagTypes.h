@@ -114,6 +114,31 @@ struct ofxGgmlRagContext {
 	}
 };
 
+struct ofxGgmlRagPromptOptions {
+	std::string systemInstruction = "Answer the question using only the cited context. If the context is insufficient, say so.";
+	std::string contextHeading = "Cited context";
+	std::string questionHeading = "Question";
+	std::string answerHeading = "Answer";
+	bool includeReferences = true;
+	std::size_t maxPromptChars = 6000;
+};
+
+struct ofxGgmlRagPrompt {
+	bool success = false;
+	std::string error;
+	std::string question;
+	std::string systemInstruction;
+	std::string context;
+	std::string prompt;
+	std::vector<std::string> references;
+	std::vector<ofxGgmlRagCitation> citations;
+	bool truncated = false;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
 struct ofxGgmlRagRetrievalOptions {
 	ofxGgmlRagChunkOptions chunk;
 	ofxGgmlRagSearchOptions search;

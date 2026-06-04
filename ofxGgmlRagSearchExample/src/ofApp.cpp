@@ -4,14 +4,8 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <fstream>
 
 namespace {
-	void TraceStartup(const std::string & message) {
-		std::ofstream trace("ofxGgmlRagSearchExample-startup.log", std::ios::app);
-		trace << message << "\n";
-	}
-
 	std::string GetEnvText(const char * name) {
 #if defined(_WIN32)
 		char * value = nullptr;
@@ -48,61 +42,45 @@ namespace {
 }
 
 void ofApp::setup() {
-	TraceStartup("setup: begin");
 	ofSetWindowTitle("ofxGgmlRag search example");
-	TraceStartup("setup: before gui");
 	gui.setup(nullptr, false);
-	TraceStartup("setup: after gui");
 
 	queryInput = GetEnvText("OFXGGML_RAG_QUERY");
-	TraceStartup("setup: after query env");
 	if (queryInput.empty()) {
 		queryInput = "citation memory";
 	}
 	sourceRootInput = GetEnvText("OFXGGML_RAG_SOURCE_ROOT");
-	retrievalOptions.context.includeScores = true;
-	TraceStartup("setup: before runRetrieval");
+	rag.getRetrievalOptions().context.includeScores = true;
 	runRetrieval();
-	TraceStartup("setup: end");
 }
 
 void ofApp::runRetrieval() {
-	TraceStartup("runRetrieval: begin");
-	ofxGgmlRagRequest request;
-	request.query = queryInput;
-	request.sourceRoot = sourceRootInput;
-	retrievalOptions.search.topK = static_cast<std::size_t>(std::max(1, topK));
-	retrievalOptions.context.includeQuery = true;
+	rag.setQuery(queryInput);
+	rag.getRetrievalOptions().search.topK = static_cast<std::size_t>(std::max(1, topK));
+	rag.getRetrievalOptions().context.includeQuery = true;
 
 	useBuiltInDocument = ofxGgmlRagUtils::trim(sourceRootInput).empty();
 	if (useBuiltInDocument) {
-		TraceStartup("runRetrieval: before built-in retrieve");
-		request.sourceRoot = "example";
-		retrieval = ofxGgmlRagUtils::retrieve(request, BuiltInDocuments(), retrievalOptions);
-		TraceStartup("runRetrieval: after built-in retrieve");
+		rag.setDocuments(BuiltInDocuments(), "example");
 	} else {
-		TraceStartup("runRetrieval: before text corpus retrieve");
-		retrieval = ofxGgmlRagUtils::retrieveTextCorpus(request, ofxGgmlRagCorpusOptions(), retrievalOptions);
-		TraceStartup("runRetrieval: after text corpus retrieve");
+		rag.clearDocuments();
+		rag.setSourceRoot(sourceRootInput);
 	}
+	rag.retrieve();
 
 	ofxGgmlRagReportOptions reportOptions;
 	reportOptions.includeContext = includeContext;
-	reportOptions.maxHits = retrievalOptions.search.topK;
-	report = ofxGgmlRagUtils::formatRetrieval(retrieval, reportOptions);
-	status = ofxGgmlRagUtils::summarize(retrieval);
+	reportOptions.maxHits = rag.getRetrievalOptions().search.topK;
+	report = rag.format(reportOptions);
+	status = rag.summarize();
+	const auto prompt = rag.buildPrompt();
+	promptText = prompt ? prompt.prompt : prompt.error;
 	if (useBuiltInDocument) {
 		status += "; using built-in documents";
 	}
-	TraceStartup("runRetrieval: end");
 }
 
 void ofApp::draw() {
-	static bool tracedDraw = false;
-	if (!tracedDraw) {
-		TraceStartup("draw: begin");
-		tracedDraw = true;
-	}
 	ofBackground(18);
 
 	gui.begin();
@@ -124,18 +102,28 @@ void ofApp::draw() {
 		ImGui::Separator();
 		ImGui::TextWrapped("%s", status.c_str());
 		ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu",
-			retrieval.stats.documentCount,
-			retrieval.stats.scopedDocumentCount,
-			retrieval.stats.skippedDocumentCount,
-			retrieval.stats.chunkCount,
-			retrieval.stats.hitCount);
+			rag.getLastRetrieval().stats.documentCount,
+			rag.getLastRetrieval().stats.scopedDocumentCount,
+			rag.getLastRetrieval().stats.skippedDocumentCount,
+			rag.getLastRetrieval().stats.chunkCount,
+			rag.getLastRetrieval().stats.hitCount);
 
 		ImGui::Spacing();
-		ImGui::TextUnformatted("Retrieval Report");
-		ImGui::Separator();
-		ImGui::BeginChild("report", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
-		ImGui::TextWrapped("%s", report.c_str());
-		ImGui::EndChild();
+		if (ImGui::BeginTabBar("rag-output")) {
+			if (ImGui::BeginTabItem("Retrieval")) {
+				ImGui::BeginChild("report", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::TextWrapped("%s", report.c_str());
+				ImGui::EndChild();
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("LLM Prompt")) {
+				ImGui::BeginChild("prompt", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::TextWrapped("%s", promptText.c_str());
+				ImGui::EndChild();
+				ImGui::EndTabItem();
+			}
+			ImGui::EndTabBar();
+		}
 	}
 	ImGui::End();
 	gui.end();

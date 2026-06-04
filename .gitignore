@@ -28,6 +28,7 @@ ofxGgml*Example/*.vcxproj
 ofxGgml*Example/*.vcxproj.filters
 ofxGgml*Example/*.vcxproj.user
 ofxGgml*Example/config.make
+!ofxGgmlRagSearchExample/config.make
 ofxGgml*Example/icon.rc
 
 models/

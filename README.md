@@ -10,6 +10,8 @@ Current addon API version: `1.0.1`.
 
 ## Features
 
+- stateful `ofxGgmlRag` addon facade for apps and examples
+- citation-grounded LLM prompt handoff builder
 - document ingestion workflow boundary
 - deterministic local text-corpus loading bridge
 - direct source-root text-corpus retrieval helper
@@ -98,6 +100,12 @@ artifacts.
 `ofxGgmlRagUtils::retrieveTextCorpus(...)` combines source-root loading and
 deterministic retrieval for apps and examples that do not need to inspect the
 intermediate document list.
+
+Use the `ofxGgmlRag` class when building an app: set a query/source root or
+in-memory documents, tune `getRetrievalOptions()`, call `retrieve()` or
+`search(...)`, then read `getLastRetrieval()`, `summarize()`, `format(...)`, or
+`formatJson(...)`. Call `buildPrompt()` to get a citation-grounded prompt that
+can be handed to a future local LLM backend.
 
 Pass `-SourceRoot` to `scripts\doctor-rag.ps1` to report supported local text
 corpus files before wiring an app or example to the bridge.

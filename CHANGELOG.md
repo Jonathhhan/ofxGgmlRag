@@ -9,6 +9,11 @@
   existing request-boundary retrieval helper.
 - Added `ofxGgmlRagUtils::retrieveTextCorpus(...)` for one-call source-root
   retrieval.
+- Added the stateful `ofxGgmlRag` facade for apps/examples to load documents,
+  run retrieval, and format the latest result without manually stitching helper
+  calls together.
+- Added `ofxGgmlRagPrompt` and prompt-building helpers for citation-grounded
+  model handoff.
 - Extended headless tests and runtime smoke coverage with a corpus retrieval
   probe.
 - Updated `doctor-rag.ps1`, `run-rag-runtime-smoke.ps1`, and the ImGui-backed

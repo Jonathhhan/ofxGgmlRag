@@ -35,6 +35,10 @@ namespace ofxGgmlRagUtils {
 		const std::vector<ofxGgmlRagSearchHit> & hits,
 		const ofxGgmlRagContextOptions & options = ofxGgmlRagContextOptions());
 	ofxGgmlRagResult resultFromHits(const std::string & query, const std::vector<ofxGgmlRagSearchHit> & hits);
+	ofxGgmlRagPrompt buildPrompt(
+		const std::string & query,
+		const ofxGgmlRagRetrieval & retrieval,
+		const ofxGgmlRagPromptOptions & options = ofxGgmlRagPromptOptions());
 	ofxGgmlRagRetrieval retrieve(
 		const ofxGgmlRagRequest & request,
 		const std::vector<ofxGgmlRagDocument> & documents,

@@ -16,8 +16,8 @@ private:
 	std::string sourceRootInput;
 	std::string status;
 	std::string report;
-	ofxGgmlRagRetrieval retrieval;
-	ofxGgmlRagRetrievalOptions retrievalOptions;
+	std::string promptText;
+	ofxGgmlRag rag;
 	bool useBuiltInDocument = false;
 	bool includeContext = true;
 	int topK = 3;
