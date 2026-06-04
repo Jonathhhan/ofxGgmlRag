@@ -437,6 +437,7 @@ int main(int argc, char ** argv) {
 	ofxGgmlRagRetrieval promptRetrieval;
 	promptRetrieval.result = hitResult;
 	promptRetrieval.context = context;
+	promptRetrieval.hits = hits;
 	ofxGgmlRagPromptOptions promptOptions;
 	const auto prompt = ofxGgmlRagUtils::buildPrompt("workflow citation memory", promptRetrieval, promptOptions);
 	if (!prompt ||
@@ -459,6 +460,31 @@ int main(int argc, char ** argv) {
 	const auto failedPrompt = ofxGgmlRagUtils::buildPrompt("workflow citation memory", ofxGgmlRagRetrieval(), ofxGgmlRagPromptOptions());
 	if (failedPrompt || failedPrompt.error.empty()) {
 		std::cerr << "prompt builder did not report missing retrieval context\n";
+		return 1;
+	}
+
+	ofxGgmlRagAnswerOptions answerOptions;
+	const auto answer = ofxGgmlRagUtils::draftAnswer("workflow citation memory", promptRetrieval, answerOptions);
+	if (!answer ||
+		!answer.extractive ||
+		answer.text.find("Extractive answer draft for: workflow citation memory") == std::string::npos ||
+		answer.text.find("not a model-generated answer") == std::string::npos ||
+		answer.text.find("[1] workflow citation memory") == std::string::npos ||
+		answer.text.find("References:\n[1] a.md#1") == std::string::npos ||
+		answer.citations.size() != 2 ||
+		answer.references.size() != 2) {
+		std::cerr << "answer draft did not assemble extractive cited evidence\n";
+		return 1;
+	}
+	answerOptions.maxAnswerChars = 150;
+	const auto truncatedAnswer = ofxGgmlRagUtils::draftAnswer("workflow citation memory", promptRetrieval, answerOptions);
+	if (!truncatedAnswer || !truncatedAnswer.truncated || truncatedAnswer.text.size() > 150) {
+		std::cerr << "answer draft did not honor answer character budget\n";
+		return 1;
+	}
+	const auto failedAnswer = ofxGgmlRagUtils::draftAnswer("workflow citation memory", ofxGgmlRagRetrieval(), ofxGgmlRagAnswerOptions());
+	if (failedAnswer || failedAnswer.error.empty()) {
+		std::cerr << "answer draft did not report missing retrieval evidence\n";
 		return 1;
 	}
 
@@ -527,7 +553,8 @@ int main(int argc, char ** argv) {
 		rag.getLastRetrieval().hits.size() != 1 ||
 		rag.getLastRetrieval().hits[0].chunk.source != "docs/a.md" ||
 		rag.format().find("hit[1] docs/a.md#0") == std::string::npos ||
-		rag.buildPrompt().prompt.find("Question:\ncitation memory") == std::string::npos) {
+		rag.buildPrompt().prompt.find("Question:\ncitation memory") == std::string::npos ||
+		rag.draftAnswer().text.find("Extractive answer draft for: citation memory") == std::string::npos) {
 		std::cerr << "ofxGgmlRag facade did not search in-memory documents\n";
 		return 1;
 	}

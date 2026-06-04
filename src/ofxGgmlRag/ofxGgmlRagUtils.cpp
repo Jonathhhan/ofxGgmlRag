@@ -826,6 +826,83 @@ namespace ofxGgmlRagUtils {
 		return prompt;
 	}
 
+	ofxGgmlRagAnswer draftAnswer(
+		const std::string & query,
+		const ofxGgmlRagRetrieval & retrieval,
+		const ofxGgmlRagAnswerOptions & options) {
+		ofxGgmlRagAnswer answer;
+		answer.question = trim(query);
+
+		if (!retrieval) {
+			answer.error = retrieval.result.error.empty() ? "retrieval has no cited evidence" : retrieval.result.error;
+			return answer;
+		}
+		if (answer.question.empty()) {
+			answer.error = "query is required";
+			return answer;
+		}
+		if (retrieval.hits.empty()) {
+			answer.error = "no matching chunks";
+			return answer;
+		}
+		if (options.maxHits == 0) {
+			answer.error = "answer hit budget is zero";
+			return answer;
+		}
+		if (options.maxAnswerChars == 0) {
+			answer.error = "answer character budget is zero";
+			return answer;
+		}
+
+		std::ostringstream header;
+		header << "Extractive answer draft for: " << answer.question << "\n";
+		header << "This is cited retrieval evidence, not a model-generated answer.\n\n";
+		std::string text = header.str();
+		if (text.size() > options.maxAnswerChars) {
+			answer.error = "answer character budget is too small";
+			answer.truncated = true;
+			return answer;
+		}
+
+		const auto maxHits = std::min(options.maxHits, retrieval.hits.size());
+		for (std::size_t i = 0; i < maxHits; ++i) {
+			const auto & hit = retrieval.hits[i];
+			const auto citation = citationFromChunk(hit.chunk);
+			auto excerpt = excerptForHit(hit, options.excerpt);
+			if (excerpt.empty()) {
+				excerpt = trim(hit.chunk.text);
+			}
+			if (excerpt.empty()) {
+				continue;
+			}
+
+			std::ostringstream line;
+			line << "[" << (answer.citations.size() + 1) << "] " << excerpt << "\n";
+			if (!AppendWithinLimit(text, line.str(), options.maxAnswerChars)) {
+				answer.truncated = true;
+				break;
+			}
+			answer.citations.push_back(citation);
+		}
+
+		if (answer.citations.empty()) {
+			answer.error = answer.truncated ? "answer character budget is too small" : "retrieval evidence is empty";
+			return answer;
+		}
+
+		answer.references = referencesFromCitations(answer.citations);
+		if (options.includeReferences && !answer.references.empty()) {
+			const auto references = "\nReferences:\n" + formatReferences(answer.references);
+			if (!AppendWithinLimit(text, references, options.maxAnswerChars)) {
+				answer.truncated = true;
+			}
+		}
+
+		answer.text = text;
+		answer.success = true;
+		return answer;
+	}
+
 	ofxGgmlRagRetrieval retrieve(
 		const ofxGgmlRagRequest & request,
 		const std::vector<ofxGgmlRagDocument> & documents,

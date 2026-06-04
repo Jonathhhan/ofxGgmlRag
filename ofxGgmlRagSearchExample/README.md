@@ -17,7 +17,8 @@ The source-root bridge uses the stateful `ofxGgmlRag` addon facade to read
 supported `.md` and `.txt` files and run deterministic retrieval. It does not
 create indexes, download models, run embeddings, or write generated artifacts.
 The `LLM Prompt` tab shows the citation-grounded prompt that a future local
-model backend should answer from.
+model backend should answer from. The `Answer Draft` tab shows the current
+extractive citation-backed answer preview without claiming model generation.
 
 `config.make` keeps ofxImGui on openFrameworks event-listener mode for this
 example (`OFXIMGUI_GLFW_EVENTS_REPLACE_OF_CALLBACKS=0`).

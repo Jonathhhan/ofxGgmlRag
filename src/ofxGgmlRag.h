@@ -44,6 +44,7 @@ public:
 	std::string format(const ofxGgmlRagReportOptions & options = ofxGgmlRagReportOptions()) const;
 	std::string formatJson(const ofxGgmlRagReportOptions & options = ofxGgmlRagReportOptions()) const;
 	ofxGgmlRagPrompt buildPrompt(const ofxGgmlRagPromptOptions & options = ofxGgmlRagPromptOptions()) const;
+	ofxGgmlRagAnswer draftAnswer(const ofxGgmlRagAnswerOptions & options = ofxGgmlRagAnswerOptions()) const;
 
 private:
 	ofxGgmlRagRequest request;

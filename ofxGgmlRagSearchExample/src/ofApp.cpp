@@ -75,6 +75,8 @@ void ofApp::runRetrieval() {
 	status = rag.summarize();
 	const auto prompt = rag.buildPrompt();
 	promptText = prompt ? prompt.prompt : prompt.error;
+	const auto answer = rag.draftAnswer();
+	answerText = answer ? answer.text : answer.error;
 	if (useBuiltInDocument) {
 		status += "; using built-in documents";
 	}
@@ -119,6 +121,12 @@ void ofApp::draw() {
 			if (ImGui::BeginTabItem("LLM Prompt")) {
 				ImGui::BeginChild("prompt", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
 				ImGui::TextWrapped("%s", promptText.c_str());
+				ImGui::EndChild();
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("Answer Draft")) {
+				ImGui::BeginChild("answer", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::TextWrapped("%s", answerText.c_str());
 				ImGui::EndChild();
 				ImGui::EndTabItem();
 			}

@@ -39,6 +39,10 @@ namespace ofxGgmlRagUtils {
 		const std::string & query,
 		const ofxGgmlRagRetrieval & retrieval,
 		const ofxGgmlRagPromptOptions & options = ofxGgmlRagPromptOptions());
+	ofxGgmlRagAnswer draftAnswer(
+		const std::string & query,
+		const ofxGgmlRagRetrieval & retrieval,
+		const ofxGgmlRagAnswerOptions & options = ofxGgmlRagAnswerOptions());
 	ofxGgmlRagRetrieval retrieve(
 		const ofxGgmlRagRequest & request,
 		const std::vector<ofxGgmlRagDocument> & documents,

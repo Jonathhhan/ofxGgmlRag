@@ -14,6 +14,8 @@
   calls together.
 - Added `ofxGgmlRagPrompt` and prompt-building helpers for citation-grounded
   model handoff.
+- Added `ofxGgmlRagAnswer` and deterministic extractive answer drafts for
+  citation-backed UI previews.
 - Extended headless tests and runtime smoke coverage with a corpus retrieval
   probe.
 - Updated `doctor-rag.ps1`, `run-rag-runtime-smoke.ps1`, and the ImGui-backed

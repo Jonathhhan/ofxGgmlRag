@@ -139,6 +139,28 @@ struct ofxGgmlRagPrompt {
 	}
 };
 
+struct ofxGgmlRagAnswerOptions {
+	std::size_t maxHits = 3;
+	std::size_t maxAnswerChars = 1200;
+	bool includeReferences = true;
+	ofxGgmlRagExcerptOptions excerpt;
+};
+
+struct ofxGgmlRagAnswer {
+	bool success = false;
+	std::string error;
+	std::string question;
+	std::string text;
+	std::vector<std::string> references;
+	std::vector<ofxGgmlRagCitation> citations;
+	bool extractive = true;
+	bool truncated = false;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
 struct ofxGgmlRagRetrievalOptions {
 	ofxGgmlRagChunkOptions chunk;
 	ofxGgmlRagSearchOptions search;

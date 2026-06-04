@@ -156,3 +156,7 @@ std::string ofxGgmlRag::formatJson(const ofxGgmlRagReportOptions & options) cons
 ofxGgmlRagPrompt ofxGgmlRag::buildPrompt(const ofxGgmlRagPromptOptions & options) const {
 	return ofxGgmlRagUtils::buildPrompt(request.query, lastRetrieval, options);
 }
+
+ofxGgmlRagAnswer ofxGgmlRag::draftAnswer(const ofxGgmlRagAnswerOptions & options) const {
+	return ofxGgmlRagUtils::draftAnswer(request.query, lastRetrieval, options);
+}
