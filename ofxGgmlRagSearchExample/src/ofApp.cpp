@@ -30,14 +30,37 @@ namespace {
 			{
 				"example/in-memory.md",
 				"RAG citation memory stays local until a user source root is configured.",
-				{ "example" }
+				{ "example" },
+				0.9
 			},
 			{
 				"example/workflow.md",
 				"Local text corpus retrieval can load markdown and text files without embeddings or indexes.",
-				{ "example", "workflow" }
+				{ "example", "workflow" },
+				0.65
 			}
 		};
+	}
+
+	std::vector<std::string> SplitVariants(const std::string & value) {
+		std::vector<std::string> variants;
+		std::string current;
+		for (const auto ch : value) {
+			if (ch == ',' || ch == ';' || ch == '\n') {
+				const auto cleaned = ofxGgmlRagUtils::trim(current);
+				if (!cleaned.empty()) {
+					variants.push_back(cleaned);
+				}
+				current.clear();
+				continue;
+			}
+			current.push_back(ch);
+		}
+		const auto cleaned = ofxGgmlRagUtils::trim(current);
+		if (!cleaned.empty()) {
+			variants.push_back(cleaned);
+		}
+		return variants;
 	}
 }
 
@@ -57,6 +80,8 @@ void ofApp::setup() {
 void ofApp::runRetrieval() {
 	rag.setQuery(queryInput);
 	rag.getRetrievalOptions().search.topK = static_cast<std::size_t>(std::max(1, topK));
+	rag.getRetrievalOptions().search.queryVariants = SplitVariants(queryVariantsInput);
+	rag.getRetrievalOptions().search.qualityWeight = useQualityRanking ? 0.15 : 0.0;
 	rag.getRetrievalOptions().context.includeQuery = true;
 
 	useBuiltInDocument = ofxGgmlRagUtils::trim(sourceRootInput).empty();
@@ -92,9 +117,11 @@ void ofApp::draw() {
 		ImGui::TextUnformatted("Retrieval Request");
 		ImGui::Separator();
 		ImGui::InputText("Query", &queryInput);
+		ImGui::InputText("Variants", &queryVariantsInput);
 		ImGui::InputText("Source root", &sourceRootInput);
 		ImGui::SliderInt("Top K", &topK, 1, 10);
 		ImGui::Checkbox("Context", &includeContext);
+		ImGui::Checkbox("Quality rank", &useQualityRanking);
 		if (ImGui::Button("Run")) {
 			runRetrieval();
 		}

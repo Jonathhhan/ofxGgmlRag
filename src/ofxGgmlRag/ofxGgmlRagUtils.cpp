@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <limits>
 #include <sstream>
 #include <system_error>
+#include <unordered_set>
 
 namespace ofxGgmlRagUtils {
 	namespace {
@@ -47,6 +49,51 @@ namespace ofxGgmlRagUtils {
 				lowered.push_back(ToLowerAscii(ch));
 			}
 			return lowered;
+		}
+
+		const std::unordered_set<std::string> & StopWords() {
+			static const std::unordered_set<std::string> words = {
+				"a", "an", "the", "is", "it", "in", "on", "at", "to", "of",
+				"and", "or", "for", "with", "as", "by", "be", "are", "was",
+				"that", "this", "which", "from", "not", "but", "so", "if",
+				"what", "where", "when", "why", "how"
+			};
+			return words;
+		}
+
+		std::vector<std::string> ScoringTerms(const std::string & text, bool ignoreStopWords) {
+			auto terms = tokenize(text);
+			if (!ignoreStopWords) {
+				return terms;
+			}
+			std::vector<std::string> filtered;
+			for (const auto & term : terms) {
+				if (StopWords().find(term) == StopWords().end()) {
+					filtered.push_back(term);
+				}
+			}
+			return filtered.empty() ? terms : filtered;
+		}
+
+		std::vector<std::string> DedupeQueries(const std::vector<std::string> & queries) {
+			std::vector<std::string> output;
+			std::unordered_set<std::string> seen;
+			for (const auto & query : queries) {
+				const auto cleaned = trim(query);
+				if (cleaned.empty()) {
+					continue;
+				}
+				const auto key = LowerAscii(cleaned);
+				if (!seen.insert(key).second) {
+					continue;
+				}
+				output.push_back(cleaned);
+			}
+			return output;
+		}
+
+		double ClampUnit(double value) {
+			return std::max(0.0, std::min(1.0, value));
 		}
 
 		std::vector<std::string> NormalizeTags(const std::vector<std::string> & input) {
@@ -349,6 +396,56 @@ namespace ofxGgmlRagUtils {
 		return tokens;
 	}
 
+	std::vector<std::string> refinedQueries(const std::string & query, std::size_t maxAdditionalQueries) {
+		if (maxAdditionalQueries == 0) {
+			return {};
+		}
+		const auto terms = ScoringTerms(query, true);
+		std::vector<std::string> candidates;
+		if (!terms.empty()) {
+			std::ostringstream focused;
+			for (std::size_t i = 0; i < terms.size(); ++i) {
+				if (i > 0) {
+					focused << " ";
+				}
+				focused << terms[i];
+			}
+			candidates.push_back(focused.str());
+		}
+		if (candidates.size() < maxAdditionalQueries && terms.size() >= 2) {
+			candidates.push_back(terms.front() + " " + terms.back());
+		}
+		auto refined = DedupeQueries(candidates);
+		if (refined.size() > maxAdditionalQueries) {
+			refined.resize(maxAdditionalQueries);
+		}
+		return refined;
+	}
+
+	float l2Norm(const std::vector<float> & values) {
+		double sum = 0.0;
+		for (const auto value : values) {
+			sum += static_cast<double>(value) * static_cast<double>(value);
+		}
+		return static_cast<float>(std::sqrt(sum));
+	}
+
+	float cosineSimilarity(const std::vector<float> & a, const std::vector<float> & b) {
+		if (a.empty() || b.empty() || a.size() != b.size()) {
+			return 0.0f;
+		}
+		const auto aNorm = l2Norm(a);
+		const auto bNorm = l2Norm(b);
+		if (aNorm == 0.0f || bNorm == 0.0f) {
+			return 0.0f;
+		}
+		double dot = 0.0;
+		for (std::size_t i = 0; i < a.size(); ++i) {
+			dot += static_cast<double>(a[i]) * static_cast<double>(b[i]);
+		}
+		return static_cast<float>(dot / (static_cast<double>(aNorm) * static_cast<double>(bNorm)));
+	}
+
 	bool sourceMatchesRoot(const std::string & sourceRoot, const std::string & source) {
 		const auto root = NormalizeSourcePath(sourceRoot);
 		if (root.empty()) {
@@ -560,6 +657,15 @@ namespace ofxGgmlRagUtils {
 		if (queryTerms.empty() || options.topK == 0) {
 			return hits;
 		}
+		std::vector<std::string> candidateQueries = { query };
+		for (const auto & variant : options.queryVariants) {
+			candidateQueries.push_back(variant);
+		}
+		if (options.allowQueryRefinement) {
+			const auto refined = refinedQueries(query, options.maxRefinementQueries);
+			candidateQueries.insert(candidateQueries.end(), refined.begin(), refined.end());
+		}
+		candidateQueries = DedupeQueries(candidateQueries);
 
 		const auto queryPhrase = LowerAscii(trim(query));
 		const auto minMatchedTerms = std::max<std::size_t>(1, options.minMatchedTerms);
@@ -580,19 +686,34 @@ namespace ofxGgmlRagUtils {
 			const auto chunkTerms = tokenize(chunk.text);
 			ofxGgmlRagSearchHit hit;
 			hit.chunk = chunk;
-			for (const auto & term : queryTerms) {
-				if (std::find(chunkTerms.begin(), chunkTerms.end(), term) != chunkTerms.end()) {
-					hit.matchedTerms.push_back(term);
+			for (const auto & candidateQuery : candidateQueries) {
+				const auto candidateTerms = ScoringTerms(candidateQuery, options.ignoreStopWords);
+				if (candidateTerms.empty()) {
+					continue;
+				}
+
+				std::vector<std::string> matchedTerms;
+				for (const auto & term : candidateTerms) {
+					if (std::find(chunkTerms.begin(), chunkTerms.end(), term) != chunkTerms.end()) {
+						matchedTerms.push_back(term);
+					}
+				}
+				if (matchedTerms.empty() || matchedTerms.size() < minMatchedTerms) {
+					continue;
+				}
+				const auto lexicalScore =
+					static_cast<double>(matchedTerms.size()) / static_cast<double>(candidateTerms.size());
+				if (lexicalScore > hit.lexicalScore) {
+					hit.lexicalScore = lexicalScore;
+					hit.matchedTerms = matchedTerms;
 				}
 			}
 			if (hit.matchedTerms.empty()) {
 				continue;
 			}
-			if (hit.matchedTerms.size() < minMatchedTerms) {
-				continue;
-			}
 
-			hit.score = static_cast<double>(hit.matchedTerms.size()) / static_cast<double>(queryTerms.size());
+			hit.qualityScore = ClampUnit(chunk.qualityHint);
+			hit.score = hit.lexicalScore + (hit.qualityScore * std::max(0.0, options.qualityWeight));
 			if (options.phraseBoost > 0.0 && !queryPhrase.empty() && LowerAscii(chunk.text).find(queryPhrase) != std::string::npos) {
 				hit.score += options.phraseBoost;
 			}
@@ -603,6 +724,42 @@ namespace ofxGgmlRagUtils {
 		}
 
 		std::sort(hits.begin(), hits.end(), [](const ofxGgmlRagSearchHit & left, const ofxGgmlRagSearchHit & right) {
+			if (left.score != right.score) {
+				return left.score > right.score;
+			}
+			if (left.chunk.source != right.chunk.source) {
+				return left.chunk.source < right.chunk.source;
+			}
+			return left.chunk.index < right.chunk.index;
+		});
+
+		if (hits.size() > options.topK) {
+			hits.resize(options.topK);
+		}
+		return hits;
+	}
+
+	std::vector<ofxGgmlRagVectorSearchHit> searchEmbeddedChunks(
+		const std::vector<float> & queryEmbedding,
+		const std::vector<ofxGgmlRagEmbeddedChunk> & chunks,
+		const ofxGgmlRagVectorSearchOptions & options) {
+		std::vector<ofxGgmlRagVectorSearchHit> hits;
+		if (queryEmbedding.empty() || chunks.empty() || options.topK == 0) {
+			return hits;
+		}
+
+		for (const auto & embedded : chunks) {
+			const auto score = static_cast<double>(cosineSimilarity(queryEmbedding, embedded.embedding));
+			if (score < options.minScore) {
+				continue;
+			}
+			ofxGgmlRagVectorSearchHit hit;
+			hit.chunk = embedded.chunk;
+			hit.score = score;
+			hits.push_back(hit);
+		}
+
+		std::sort(hits.begin(), hits.end(), [](const ofxGgmlRagVectorSearchHit & left, const ofxGgmlRagVectorSearchHit & right) {
 			if (left.score != right.score) {
 				return left.score > right.score;
 			}
@@ -940,6 +1097,9 @@ namespace ofxGgmlRagUtils {
 			}
 
 			auto chunks = chunkText(document.source, document.text, options.chunk, documentTags);
+			for (auto & chunk : chunks) {
+				chunk.qualityHint = document.qualityHint;
+			}
 			retrieval.chunks.insert(retrieval.chunks.end(), chunks.begin(), chunks.end());
 		}
 		if (retrieval.chunks.empty()) {

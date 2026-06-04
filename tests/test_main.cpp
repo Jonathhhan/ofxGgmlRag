@@ -251,6 +251,11 @@ int main(int argc, char ** argv) {
 		std::cerr << "tokenization did not normalize unique terms\n";
 		return 1;
 	}
+	const auto refined = ofxGgmlRagUtils::refinedQueries("What is the citation memory plan?", 1);
+	if (refined.size() != 1 || refined[0] != "citation memory plan") {
+		std::cerr << "query refinement did not remove common stop words\n";
+		return 1;
+	}
 	if (!ofxGgmlRagUtils::sourceMatchesRoot("docs", "docs/a.md") ||
 		!ofxGgmlRagUtils::sourceMatchesRoot("docs\\", "docs/a.md") ||
 		ofxGgmlRagUtils::sourceMatchesRoot("docs", "docs-old/a.md")) {
@@ -362,9 +367,59 @@ int main(int argc, char ** argv) {
 		return 1;
 	}
 
+	ofxGgmlRagChunk variantChunk;
+	variantChunk.source = "transit.md";
+	variantChunk.text = "metro train stations connect districts";
+	ofxGgmlRagSearchOptions variantOptions;
+	variantOptions.queryVariants = { "metro train" };
+	const auto variantHits = ofxGgmlRagUtils::searchChunks("urban transit", { variantChunk }, variantOptions);
+	if (variantHits.size() != 1 || variantHits[0].matchedTerms.size() != 2) {
+		std::cerr << "chunk search did not use configured query variants\n";
+		return 1;
+	}
+
+	ofxGgmlRagChunk highQualityChunk;
+	highQualityChunk.source = "z.md";
+	highQualityChunk.text = "citation memory";
+	highQualityChunk.qualityHint = 1.0;
+	ofxGgmlRagChunk lowQualityChunk;
+	lowQualityChunk.source = "a.md";
+	lowQualityChunk.text = "citation memory";
+	ofxGgmlRagSearchOptions qualityOptions;
+	qualityOptions.qualityWeight = 0.25;
+	const auto qualityHits = ofxGgmlRagUtils::searchChunks("citation memory", { lowQualityChunk, highQualityChunk }, qualityOptions);
+	if (qualityHits.size() != 2 ||
+		qualityHits[0].chunk.source != "z.md" ||
+		qualityHits[0].qualityScore != 1.0 ||
+		qualityHits[0].lexicalScore != 1.0) {
+		std::cerr << "chunk search did not apply source quality hints\n";
+		return 1;
+	}
+
 	searchOptions.topK = 0;
 	if (!ofxGgmlRagUtils::searchChunks("citation", searchChunks, searchOptions).empty()) {
 		std::cerr << "chunk search ignored topK zero\n";
+		return 1;
+	}
+
+	if (ofxGgmlRagUtils::cosineSimilarity({ 1.0f, 0.0f }, { 0.0f, 1.0f }) != 0.0f ||
+		ofxGgmlRagUtils::cosineSimilarity({ 2.0f, 0.0f }, { 1.0f, 0.0f }) != 1.0f ||
+		ofxGgmlRagUtils::cosineSimilarity({ 1.0f }, { 1.0f, 0.0f }) != 0.0f) {
+		std::cerr << "cosine similarity did not handle vector ranking basics\n";
+		return 1;
+	}
+	ofxGgmlRagEmbeddedChunk embeddedA;
+	embeddedA.chunk.source = "food.md";
+	embeddedA.embedding = { 1.0f, 0.0f };
+	ofxGgmlRagEmbeddedChunk embeddedB;
+	embeddedB.chunk.source = "transit.md";
+	embeddedB.embedding = { 0.0f, 1.0f };
+	ofxGgmlRagVectorSearchOptions vectorOptions;
+	vectorOptions.topK = 1;
+	vectorOptions.minScore = 0.5;
+	const auto vectorHits = ofxGgmlRagUtils::searchEmbeddedChunks({ 0.0f, 2.0f }, { embeddedA, embeddedB }, vectorOptions);
+	if (vectorHits.size() != 1 || vectorHits[0].chunk.source != "transit.md" || vectorHits[0].score < 0.99) {
+		std::cerr << "embedded chunk search did not rank by cosine similarity\n";
 		return 1;
 	}
 

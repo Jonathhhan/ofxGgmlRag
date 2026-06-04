@@ -5,8 +5,9 @@ intentionally small while model-backed and index-backed integrations are
 planned.
 
 By default, the ImGui panel runs a deterministic in-memory retrieval request.
-Use the query, source-root, top-k, context, and run controls to inspect a local
-text corpus. To prefill user-provided local text files, set:
+Use the query, variants, source-root, top-k, context, quality-rank, and run
+controls to inspect a local text corpus. To prefill user-provided local text
+files, set:
 
 ```powershell
 $env:OFXGGML_RAG_QUERY = "citation memory"

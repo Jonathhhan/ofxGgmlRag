@@ -16,6 +16,9 @@
   model handoff.
 - Added `ofxGgmlRagAnswer` and deterministic extractive answer drafts for
   citation-backed UI previews.
+- Ported dependency-light RAG pipeline behavior from the legacy addon shape:
+  stopword-aware query refinement, query variants, source quality hints, and
+  cosine/vector search helpers.
 - Extended headless tests and runtime smoke coverage with a corpus retrieval
   probe.
 - Updated `doctor-rag.ps1`, `run-rag-runtime-smoke.ps1`, and the ImGui-backed

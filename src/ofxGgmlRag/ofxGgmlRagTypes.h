@@ -14,6 +14,7 @@ struct ofxGgmlRagDocument {
 	std::string source;
 	std::string text;
 	std::vector<std::string> tags;
+	double qualityHint = 0.0;
 };
 
 struct ofxGgmlRagCorpusOptions {
@@ -74,6 +75,7 @@ struct ofxGgmlRagChunk {
 	std::size_t start = 0;
 	std::size_t end = 0;
 	std::vector<std::string> tags;
+	double qualityHint = 0.0;
 };
 
 struct ofxGgmlRagSearchOptions {
@@ -81,6 +83,11 @@ struct ofxGgmlRagSearchOptions {
 	std::size_t minMatchedTerms = 1;
 	double minScore = 0.0;
 	double phraseBoost = 0.0;
+	double qualityWeight = 0.0;
+	bool ignoreStopWords = true;
+	bool allowQueryRefinement = true;
+	std::size_t maxRefinementQueries = 1;
+	std::vector<std::string> queryVariants;
 	std::vector<std::string> requiredTags;
 	std::vector<std::string> excludedTags;
 	std::vector<std::string> excludedSourceRoots;
@@ -89,7 +96,24 @@ struct ofxGgmlRagSearchOptions {
 struct ofxGgmlRagSearchHit {
 	ofxGgmlRagChunk chunk;
 	double score = 0.0;
+	double lexicalScore = 0.0;
+	double qualityScore = 0.0;
 	std::vector<std::string> matchedTerms;
+};
+
+struct ofxGgmlRagEmbeddedChunk {
+	ofxGgmlRagChunk chunk;
+	std::vector<float> embedding;
+};
+
+struct ofxGgmlRagVectorSearchOptions {
+	std::size_t topK = 5;
+	double minScore = 0.0;
+};
+
+struct ofxGgmlRagVectorSearchHit {
+	ofxGgmlRagChunk chunk;
+	double score = 0.0;
 };
 
 struct ofxGgmlRagExcerptOptions {

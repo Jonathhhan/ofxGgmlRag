@@ -13,6 +13,7 @@ private:
 	void runRetrieval();
 
 	std::string queryInput;
+	std::string queryVariantsInput;
 	std::string sourceRootInput;
 	std::string status;
 	std::string report;
@@ -21,6 +22,7 @@ private:
 	ofxGgmlRag rag;
 	bool useBuiltInDocument = false;
 	bool includeContext = true;
+	bool useQualityRanking = true;
 	int topK = 3;
 	ofxImGui::Gui gui;
 };

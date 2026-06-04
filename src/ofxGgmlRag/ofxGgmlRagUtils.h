@@ -8,6 +8,9 @@
 namespace ofxGgmlRagUtils {
 	std::string trim(const std::string & text);
 	std::vector<std::string> tokenize(const std::string & text);
+	std::vector<std::string> refinedQueries(const std::string & query, std::size_t maxAdditionalQueries = 1);
+	float l2Norm(const std::vector<float> & values);
+	float cosineSimilarity(const std::vector<float> & a, const std::vector<float> & b);
 	bool sourceMatchesRoot(const std::string & sourceRoot, const std::string & source);
 	bool hasInput(const ofxGgmlRagRequest & request);
 	ofxGgmlRagValidation validate(const ofxGgmlRagRequest & request);
@@ -25,6 +28,10 @@ namespace ofxGgmlRagUtils {
 		const std::string & query,
 		const std::vector<ofxGgmlRagChunk> & chunks,
 		const ofxGgmlRagSearchOptions & options = ofxGgmlRagSearchOptions());
+	std::vector<ofxGgmlRagVectorSearchHit> searchEmbeddedChunks(
+		const std::vector<float> & queryEmbedding,
+		const std::vector<ofxGgmlRagEmbeddedChunk> & chunks,
+		const ofxGgmlRagVectorSearchOptions & options = ofxGgmlRagVectorSearchOptions());
 	std::string excerptForHit(
 		const ofxGgmlRagSearchHit & hit,
 		const ofxGgmlRagExcerptOptions & options = ofxGgmlRagExcerptOptions());

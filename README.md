@@ -20,6 +20,9 @@ Current addon API version: `1.0.1`.
 - deterministic request validation
 - deterministic text chunking with source offsets
 - deterministic in-memory chunk search
+- stopword-aware query refinement and query-variant retrieval
+- source quality hints for retrieval ranking
+- cosine similarity and embedded chunk vector search helpers
 - minimum-score retrieval filtering
 - minimum matched-term retrieval filtering
 - excluded-tag retrieval filtering
