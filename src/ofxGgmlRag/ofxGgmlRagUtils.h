@@ -19,6 +19,30 @@ namespace ofxGgmlRagUtils {
 	ofxGgmlRagCorpus loadTextCorpus(
 		const std::string & sourceRoot,
 		const ofxGgmlRagCorpusOptions & options = ofxGgmlRagCorpusOptions());
+	ofxGgmlRagHtmlRobotsPolicy htmlRobotsPolicy(const std::string & html);
+	std::string htmlToText(const std::string & html);
+	ofxGgmlRagHtmlDocument documentFromHtml(
+		const std::string & sourceUrl,
+		const std::string & html,
+		const ofxGgmlRagHtmlOptions & options = ofxGgmlRagHtmlOptions());
+	ofxGgmlRagHtmlLinkFrontier planHtmlLinkFrontier(
+		const std::string & sourceUrl,
+		const std::string & html,
+		const ofxGgmlRagHtmlLinkOptions & options = ofxGgmlRagHtmlLinkOptions());
+	std::vector<std::string> extractHtmlLinks(
+		const std::string & sourceUrl,
+		const std::string & html,
+		const ofxGgmlRagHtmlLinkOptions & options = ofxGgmlRagHtmlLinkOptions());
+	ofxGgmlRagHtmlBatch documentsFromHtmlPages(
+		const std::vector<ofxGgmlRagHtmlPage> & pages,
+		const ofxGgmlRagHtmlBatchOptions & options = ofxGgmlRagHtmlBatchOptions());
+	ofxGgmlRagRobotsTxtPolicy parseRobotsTxt(
+		const std::string & robotsTxt,
+		const std::string & userAgent = "*");
+	bool robotsTxtAllows(
+		const std::string & url,
+		const std::string & robotsTxt,
+		const std::string & userAgent = "*");
 	std::vector<ofxGgmlRagChunk> chunkText(
 		const std::string & source,
 		const std::string & text,

@@ -150,12 +150,13 @@ void ofApp::draw() {
 		ImGui::TextUnformatted("Status");
 		ImGui::Separator();
 		ImGui::TextWrapped("%s", status.c_str());
-		ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu",
+		ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu cache=%s",
 			rag.getLastRetrieval().stats.documentCount,
 			rag.getLastRetrieval().stats.scopedDocumentCount,
 			rag.getLastRetrieval().stats.skippedDocumentCount,
 			rag.getLastRetrieval().stats.chunkCount,
-			rag.getLastRetrieval().stats.hitCount);
+			rag.getLastRetrieval().stats.hitCount,
+			rag.getLastRetrieval().stats.cacheHit ? "hit" : "miss");
 
 		ImGui::Spacing();
 		if (ImGui::BeginTabBar("rag-output")) {

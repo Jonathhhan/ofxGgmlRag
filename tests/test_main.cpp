@@ -214,6 +214,249 @@ int main(int argc, char ** argv) {
 	}
 	fs::remove_all(corpusRoot, fsError);
 
+	const std::string htmlPage =
+		"<!doctype html><html><head><title>Example &amp; Evidence</title>"
+		"<style>.hidden{display:none}</style><script>citation memory noise</script></head>"
+		"<body><h1>Retrieval &amp; citations</h1><p>Citation memory survives HTML cleanup.</p>"
+		"<a href=\"/rag?ref=nav#top\">RAG</a><a href='guide.html'>Guide</a>"
+		"<a href=\"../about\">About</a><a href=\"https://other.example/offsite\">Offsite</a>"
+		"<a href=\"/docs/private/secret.html\">Private</a><a href=\"/docs/public/visible.html\">Visible</a>"
+		"<a href=\"javascript:void(0)\">Ignored</a><a href=\"/rag?ref=nav#section\">Duplicate</a>"
+		"<!-- ignored comment --><p>Exact evidence stays readable.</p></body></html>";
+	const auto htmlText = ofxGgmlRagUtils::htmlToText(htmlPage);
+	if (htmlText.find("Retrieval & citations") == std::string::npos ||
+		htmlText.find("Citation memory survives HTML cleanup.") == std::string::npos ||
+		htmlText.find("citation memory noise") != std::string::npos ||
+		htmlText.find("ignored comment") != std::string::npos ||
+		htmlText.find("Example & Evidence") != std::string::npos) {
+		std::cerr << "HTML text extraction did not preserve body text and strip noisy blocks\n";
+		return 1;
+	}
+	ofxGgmlRagHtmlOptions htmlOptions;
+	htmlOptions.tags = { " web ", "docs", "web" };
+	htmlOptions.qualityHint = 0.75;
+	const auto htmlDocument = ofxGgmlRagUtils::documentFromHtml("https://example.com/rag", htmlPage, htmlOptions);
+	if (!htmlDocument ||
+		htmlDocument.title != "Example & Evidence" ||
+		htmlDocument.document.source != "https://example.com/rag" ||
+		htmlDocument.document.text.find("Example & Evidence Retrieval & citations") == std::string::npos ||
+		htmlDocument.document.tags.size() != 2 ||
+		htmlDocument.document.tags[0] != "web" ||
+		htmlDocument.document.qualityHint != 0.75) {
+		std::cerr << "HTML document bridge did not create deterministic RAG document metadata\n";
+		return 1;
+	}
+	const std::string noindexHtmlPage =
+		"<html><head><meta name=\"robots\" content=\"noindex, follow\"><title>Private Page</title></head>"
+		"<body><p>Private citation memory.</p></body></html>";
+	const auto noindexPolicy = ofxGgmlRagUtils::htmlRobotsPolicy(noindexHtmlPage);
+	if (!noindexPolicy.noindex || noindexPolicy.nofollow) {
+		std::cerr << "HTML robots policy did not parse noindex directives\n";
+		return 1;
+	}
+	const auto noindexDocument = ofxGgmlRagUtils::documentFromHtml("https://example.com/private", noindexHtmlPage, htmlOptions);
+	if (noindexDocument || noindexDocument.error != "html robots noindex") {
+		std::cerr << "HTML document bridge did not honor robots noindex\n";
+		return 1;
+	}
+	htmlOptions.respectRobotsMeta = false;
+	const auto forcedNoindexDocument = ofxGgmlRagUtils::documentFromHtml("https://example.com/private", noindexHtmlPage, htmlOptions);
+	if (!forcedNoindexDocument || forcedNoindexDocument.document.text.find("Private Page") == std::string::npos) {
+		std::cerr << "HTML document bridge did not honor robots override\n";
+		return 1;
+	}
+	htmlOptions.respectRobotsMeta = true;
+	const auto htmlLinks = ofxGgmlRagUtils::extractHtmlLinks("https://example.com/docs/page.html", htmlPage);
+	if (htmlLinks.size() != 5 ||
+		htmlLinks[0] != "https://example.com/rag?ref=nav" ||
+		htmlLinks[1] != "https://example.com/docs/guide.html" ||
+		htmlLinks[2] != "https://example.com/about" ||
+		htmlLinks[3] != "https://example.com/docs/private/secret.html" ||
+		htmlLinks[4] != "https://example.com/docs/public/visible.html") {
+		std::cerr << "HTML link extraction did not resolve same-origin links deterministically\n";
+		return 1;
+	}
+	const auto htmlFrontier = ofxGgmlRagUtils::planHtmlLinkFrontier("https://example.com/docs/page.html", htmlPage);
+	if (!htmlFrontier ||
+		htmlFrontier.links != htmlLinks ||
+		htmlFrontier.stats.discoveredLinkCount != 8 ||
+		htmlFrontier.stats.acceptedLinkCount != 5 ||
+		htmlFrontier.stats.skippedLinkCount != 3 ||
+		htmlFrontier.stats.duplicateLinkCount != 1 ||
+		htmlFrontier.stats.invalidLinkCount != 1 ||
+		htmlFrontier.stats.offOriginLinkCount != 1 ||
+		htmlFrontier.decisions.size() != 8 ||
+		htmlFrontier.decisions[0].reason != "accepted" ||
+		htmlFrontier.decisions.back().reason != "duplicate") {
+		std::cerr << "HTML link frontier planner did not explain accepted and skipped links\n";
+		return 1;
+	}
+	ofxGgmlRagHtmlLinkOptions scopedHtmlLinkOptions;
+	scopedHtmlLinkOptions.allowedUrlPrefixes = { "https://example.com/docs/" };
+	scopedHtmlLinkOptions.excludedUrlPrefixes = { "https://example.com/docs/private/" };
+	const auto scopedHtmlLinks = ofxGgmlRagUtils::extractHtmlLinks("https://example.com/docs/page.html", htmlPage, scopedHtmlLinkOptions);
+	if (scopedHtmlLinks.size() != 2 ||
+		scopedHtmlLinks[0] != "https://example.com/docs/guide.html" ||
+		scopedHtmlLinks[1] != "https://example.com/docs/public/visible.html") {
+		std::cerr << "HTML link extraction did not honor URL prefix scope controls\n";
+		return 1;
+	}
+	ofxGgmlRagHtmlLinkOptions htmlLinkOptions;
+	htmlLinkOptions.sameOriginOnly = false;
+	htmlLinkOptions.includeFragments = true;
+	htmlLinkOptions.maxLinks = 2;
+	const auto broadHtmlLinks = ofxGgmlRagUtils::extractHtmlLinks("https://example.com/docs/page.html", htmlPage, htmlLinkOptions);
+	if (broadHtmlLinks.size() != 2 ||
+		broadHtmlLinks[0] != "https://example.com/rag?ref=nav#top" ||
+		broadHtmlLinks[1] != "https://example.com/docs/guide.html") {
+		std::cerr << "HTML link extraction did not honor fragment and max-link options\n";
+		return 1;
+	}
+	const std::string nofollowHtmlPage =
+		"<html><head><meta name=\"robots\" content=\"index,nofollow\"><title>No Follow</title></head>"
+		"<body><p>Public citation memory.</p><a href=\"/blocked\">Blocked</a></body></html>";
+	const auto nofollowPolicy = ofxGgmlRagUtils::htmlRobotsPolicy(nofollowHtmlPage);
+	if (nofollowPolicy.noindex || !nofollowPolicy.nofollow) {
+		std::cerr << "HTML robots policy did not parse nofollow directives\n";
+		return 1;
+	}
+	if (!ofxGgmlRagUtils::extractHtmlLinks("https://example.com/docs/page.html", nofollowHtmlPage).empty()) {
+		std::cerr << "HTML link extraction did not honor robots nofollow\n";
+		return 1;
+	}
+	htmlLinkOptions.respectRobotsMeta = false;
+	htmlLinkOptions.sameOriginOnly = true;
+	htmlLinkOptions.includeFragments = false;
+	htmlLinkOptions.maxLinks = 64;
+	const auto forcedNofollowLinks = ofxGgmlRagUtils::extractHtmlLinks("https://example.com/docs/page.html", nofollowHtmlPage, htmlLinkOptions);
+	if (forcedNofollowLinks.size() != 1 || forcedNofollowLinks[0] != "https://example.com/blocked") {
+		std::cerr << "HTML link extraction did not honor robots nofollow override\n";
+		return 1;
+	}
+	const std::string robotsTxt =
+		"# crawler policy\n"
+		"User-agent: *\n"
+		"Disallow: /private/\n"
+		"Allow: /private/public/\n"
+		"Disallow: /tmp\n"
+		"\n"
+		"User-agent: OtherBot\n"
+		"Disallow: /\n";
+	const auto robotsPolicy = ofxGgmlRagUtils::parseRobotsTxt(robotsTxt, "ofxGgmlRagBot");
+	if (!robotsPolicy ||
+		robotsPolicy.rules.size() != 3 ||
+		robotsPolicy.rules[0].pathPrefix != "/private/" ||
+		robotsPolicy.rules[1].pathPrefix != "/private/public/" ||
+		!robotsPolicy.rules[1].allow) {
+		std::cerr << "robots.txt parser did not collect matching user-agent rules\n";
+		return 1;
+	}
+	if (ofxGgmlRagUtils::robotsTxtAllows("https://example.com/private/secret.html", robotsTxt, "ofxGgmlRagBot") ||
+		!ofxGgmlRagUtils::robotsTxtAllows("https://example.com/private/public/page.html", robotsTxt, "ofxGgmlRagBot") ||
+		!ofxGgmlRagUtils::robotsTxtAllows("https://example.com/docs/page.html", robotsTxt, "ofxGgmlRagBot") ||
+		ofxGgmlRagUtils::robotsTxtAllows("https://example.com/docs/page.html", robotsTxt, "OtherBot")) {
+		std::cerr << "robots.txt policy did not apply longest-prefix allow/disallow rules\n";
+		return 1;
+	}
+	ofxGgmlRagHtmlLinkOptions robotsTxtLinkOptions;
+	robotsTxtLinkOptions.robotsTxt =
+		"User-agent: ofxGgmlRagBot\n"
+		"Disallow: /docs/private/\n"
+		"Disallow: /about\n";
+	robotsTxtLinkOptions.robotsTxtUserAgent = "ofxGgmlRagBot";
+	const auto robotsTxtLinks = ofxGgmlRagUtils::extractHtmlLinks("https://example.com/docs/page.html", htmlPage, robotsTxtLinkOptions);
+	if (robotsTxtLinks.size() != 3 ||
+		robotsTxtLinks[0] != "https://example.com/rag?ref=nav" ||
+		robotsTxtLinks[1] != "https://example.com/docs/guide.html" ||
+		robotsTxtLinks[2] != "https://example.com/docs/public/visible.html") {
+		std::cerr << "HTML link extraction did not honor already-fetched robots.txt policy\n";
+		return 1;
+	}
+	const auto robotsTxtFrontier = ofxGgmlRagUtils::planHtmlLinkFrontier("https://example.com/docs/page.html", htmlPage, robotsTxtLinkOptions);
+	if (!robotsTxtFrontier ||
+		robotsTxtFrontier.links != robotsTxtLinks ||
+		robotsTxtFrontier.stats.robotsBlockedLinkCount != 2 ||
+		robotsTxtFrontier.stats.skippedLinkCount != 5) {
+		std::cerr << "HTML link frontier planner did not expose robots.txt skip diagnostics\n";
+		return 1;
+	}
+	ofxGgmlRagRequest htmlRequest;
+	htmlRequest.query = "citation memory cleanup";
+	htmlRequest.sourceRoot = "https://example.com";
+	ofxGgmlRagRetrievalOptions htmlRetrievalOptions;
+	htmlRetrievalOptions.search.topK = 1;
+	const auto htmlRetrieval = ofxGgmlRagUtils::retrieve(htmlRequest, { htmlDocument.document }, htmlRetrievalOptions);
+	if (!htmlRetrieval ||
+		htmlRetrieval.hits.empty() ||
+		htmlRetrieval.hits[0].chunk.source != "https://example.com/rag" ||
+		htmlRetrieval.result.references.empty()) {
+		std::cerr << "HTML document bridge did not feed deterministic retrieval\n";
+		return 1;
+	}
+	ofxGgmlRagHtmlBatchOptions htmlBatchOptions;
+	htmlBatchOptions.document.tags = { "web", "snapshot" };
+	htmlBatchOptions.document.qualityHint = 0.6;
+	htmlBatchOptions.links.maxLinks = 4;
+	htmlBatchOptions.links.robotsTxt = "User-agent: *\nDisallow: /docs/private/\n";
+	const std::string secondHtmlPage =
+		"<html><head><title>Second Page</title></head><body>"
+		"<p>Second citation memory page.</p><a href=\"/rag?ref=nav\">Duplicate</a>"
+		"<a href=\"/second\">Second</a></body></html>";
+	const auto htmlBatch = ofxGgmlRagUtils::documentsFromHtmlPages({
+		{ "https://example.com/docs/page.html", htmlPage },
+		{ "https://example.com/docs/second.html", secondHtmlPage },
+		{ "https://example.com/empty.html", "" }
+	}, htmlBatchOptions);
+	if (!htmlBatch ||
+		htmlBatch.stats.pageCount != 3 ||
+		htmlBatch.stats.loadedDocumentCount != 2 ||
+		htmlBatch.stats.skippedPageCount != 1 ||
+		htmlBatch.stats.linkCount != 4 ||
+		htmlBatch.documents.size() != 2 ||
+		htmlBatch.documents[0].tags.size() != 2 ||
+		htmlBatch.documents[0].tags[1] != "snapshot" ||
+		htmlBatch.links[0] != "https://example.com/rag?ref=nav" ||
+		htmlBatch.links.back() != "https://example.com/docs/public/visible.html" ||
+		htmlBatch.warnings.empty()) {
+		std::cerr << "HTML batch bridge did not produce deterministic documents and link frontier\n";
+		return 1;
+	}
+	const auto robotsHtmlBatch = ofxGgmlRagUtils::documentsFromHtmlPages({
+		{ "https://example.com/private.html", noindexHtmlPage },
+		{ "https://example.com/nofollow.html", nofollowHtmlPage }
+	}, htmlBatchOptions);
+	if (!robotsHtmlBatch ||
+		robotsHtmlBatch.stats.pageCount != 2 ||
+		robotsHtmlBatch.stats.loadedDocumentCount != 1 ||
+		robotsHtmlBatch.stats.skippedPageCount != 1 ||
+		robotsHtmlBatch.stats.linkCount != 0 ||
+		robotsHtmlBatch.documents[0].source != "https://example.com/nofollow.html" ||
+		robotsHtmlBatch.warnings.empty()) {
+		std::cerr << "HTML batch bridge did not preserve robots policy boundaries\n";
+		return 1;
+	}
+	htmlRequest.query = "second citation memory";
+	const auto htmlBatchRetrieval = ofxGgmlRagUtils::retrieve(htmlRequest, htmlBatch.documents, htmlRetrievalOptions);
+	if (!htmlBatchRetrieval ||
+		htmlBatchRetrieval.hits.empty() ||
+		htmlBatchRetrieval.hits[0].chunk.source != "https://example.com/docs/second.html") {
+		std::cerr << "HTML batch bridge did not feed deterministic retrieval\n";
+		return 1;
+	}
+	htmlBatchOptions.maxPages = 1;
+	const auto limitedHtmlBatch = ofxGgmlRagUtils::documentsFromHtmlPages({
+		{ "https://example.com/a.html", htmlPage },
+		{ "https://example.com/b.html", secondHtmlPage }
+	}, htmlBatchOptions);
+	if (!limitedHtmlBatch ||
+		limitedHtmlBatch.stats.pageCount != 2 ||
+		limitedHtmlBatch.stats.loadedDocumentCount != 1 ||
+		limitedHtmlBatch.stats.skippedPageCount != 1 ||
+		limitedHtmlBatch.warnings.empty()) {
+		std::cerr << "HTML batch bridge did not honor maxPages\n";
+		return 1;
+	}
+
 	ofxGgmlRagChunkOptions chunkOptions;
 	chunkOptions.maxChars = 18;
 	chunkOptions.overlapChars = 4;
@@ -682,6 +925,105 @@ int main(int argc, char ** argv) {
 		rag.draftAnswer().text.find("Extractive answer draft for: citation memory") == std::string::npos ||
 		!rag.findCitations()) {
 		std::cerr << "ofxGgmlRag facade did not search in-memory documents\n";
+		return 1;
+	}
+	if (rag.hasPromptGenerator()) {
+		std::cerr << "ofxGgmlRag facade reported a prompt generator before configuration\n";
+		return 1;
+	}
+	const auto missingGeneratorAnswer = rag.generateAnswer();
+	if (missingGeneratorAnswer || missingGeneratorAnswer.error != "prompt generator is not configured") {
+		std::cerr << "ofxGgmlRag facade did not report missing prompt generator\n";
+		return 1;
+	}
+	rag.setPromptGenerator([](const ofxGgmlRagPrompt & prompt) {
+		if (prompt.prompt.find("Cited context:") == std::string::npos ||
+			prompt.prompt.find("Question:\n") == std::string::npos ||
+			prompt.question.empty()) {
+			return std::string();
+		}
+		return std::string("Model-backed answer using cited context.");
+	});
+	const auto generatedAnswer = rag.generateAnswer();
+	if (!generatedAnswer ||
+		generatedAnswer.extractive ||
+		generatedAnswer.text.find("Model-backed answer using cited context.") == std::string::npos ||
+		generatedAnswer.text.find("References:\n[1] docs/a.md#0") == std::string::npos ||
+		generatedAnswer.citations.size() != 1 ||
+		generatedAnswer.references.size() != 1) {
+		std::cerr << "ofxGgmlRag facade did not generate a cited model-backed answer\n";
+		return 1;
+	}
+	const auto searchedGeneratedAnswer = rag.searchAndGenerateAnswer("workflow citation");
+	if (!searchedGeneratedAnswer ||
+		searchedGeneratedAnswer.extractive ||
+		searchedGeneratedAnswer.text.find("Model-backed answer using cited context.") == std::string::npos ||
+		rag.getRequest().query != "workflow citation" ||
+		rag.getLastRetrieval().hits.empty() ||
+		rag.getLastRetrieval().hits[0].chunk.source != "docs/a.md") {
+		std::cerr << "ofxGgmlRag facade did not search and generate in one call\n";
+		return 1;
+	}
+	const auto generateCorpusRoot = fs::temp_directory_path(fsError) / "ofxGgmlRag-generate-test";
+	fs::remove_all(generateCorpusRoot, fsError);
+	fsError.clear();
+	if (!fs::create_directories(generateCorpusRoot, fsError) || fsError) {
+		std::cerr << "could not create generation corpus fixture\n";
+		return 1;
+	}
+	std::ofstream(generateCorpusRoot / "answer.md", std::ios::binary) << "citation memory supports generated answers.";
+	const auto loadedGeneratedAnswer = rag.loadAndGenerateAnswer(generateCorpusRoot.string(), "citation memory");
+	if (!loadedGeneratedAnswer ||
+		loadedGeneratedAnswer.extractive ||
+		loadedGeneratedAnswer.references.empty() ||
+		rag.getLastRetrieval().hits.empty() ||
+		!ofxGgmlRagUtils::sourceMatchesRoot(rag.getRequest().sourceRoot, rag.getLastRetrieval().hits[0].chunk.source)) {
+		std::cerr << "ofxGgmlRag facade did not load/search and generate in one call\n";
+		return 1;
+	}
+	fs::remove_all(generateCorpusRoot, fsError);
+	ofxGgmlRagAnswerOptions generatedAnswerOptions;
+	generatedAnswerOptions.maxAnswerChars = 24;
+	const auto truncatedGeneratedAnswer = rag.generateAnswer(ofxGgmlRagPromptOptions(), generatedAnswerOptions);
+	if (!truncatedGeneratedAnswer || !truncatedGeneratedAnswer.truncated || truncatedGeneratedAnswer.text.size() != 24) {
+		std::cerr << "ofxGgmlRag facade did not honor model answer character budget\n";
+		return 1;
+	}
+	rag.clearPromptGenerator();
+	if (rag.hasPromptGenerator() || rag.generateAnswer()) {
+		std::cerr << "ofxGgmlRag facade did not clear prompt generator\n";
+		return 1;
+	}
+	if (!rag.hasCachedRetrievals() || rag.getRetrievalCacheSize() != 1) {
+		std::cerr << "ofxGgmlRag facade did not expose populated retrieval cache state\n";
+		return 1;
+	}
+	const auto cachedMemoryRetrieval = rag.search("citation memory");
+	if (!cachedMemoryRetrieval || !cachedMemoryRetrieval.stats.cacheHit || rag.getRetrievalCacheSize() != 1) {
+		std::cerr << "ofxGgmlRag facade did not cache repeated retrievals\n";
+		return 1;
+	}
+	rag.clearRetrievalCache();
+	if (rag.hasCachedRetrievals() || rag.getRetrievalCacheSize() != 0) {
+		std::cerr << "ofxGgmlRag facade did not expose cleared retrieval cache state\n";
+		return 1;
+	}
+	const auto rebuiltMemoryRetrieval = rag.search("citation memory");
+	if (!rebuiltMemoryRetrieval || rebuiltMemoryRetrieval.stats.cacheHit || rag.getRetrievalCacheSize() != 1) {
+		std::cerr << "ofxGgmlRag facade did not rebuild retrieval cache after explicit clear\n";
+		return 1;
+	}
+	rag.addDocument({ "docs/cache.md", "cache invalidation keeps retrieval fresh.", { "docs" } });
+	const auto invalidatedMemoryRetrieval = rag.search("citation memory");
+	if (!invalidatedMemoryRetrieval || invalidatedMemoryRetrieval.stats.cacheHit) {
+		std::cerr << "ofxGgmlRag facade did not invalidate retrieval cache after document changes\n";
+		return 1;
+	}
+	rag.getRetrievalOptions().enableCache = false;
+	const auto uncachedA = rag.search("citation memory");
+	const auto uncachedB = rag.search("citation memory");
+	if (!uncachedA || !uncachedB || uncachedA.stats.cacheHit || uncachedB.stats.cacheHit) {
+		std::cerr << "ofxGgmlRag facade did not honor disabled retrieval cache\n";
 		return 1;
 	}
 	documents.push_back({ "docs/private/secret.md", "citation memory should stay out of retrieval.", { "private" } });

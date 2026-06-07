@@ -45,6 +45,123 @@ struct ofxGgmlRagCorpus {
 	}
 };
 
+struct ofxGgmlRagHtmlOptions {
+	std::vector<std::string> tags = { "web" };
+	std::size_t maxHtmlBytes = 1024 * 1024;
+	bool includeTitleInText = true;
+	bool respectRobotsMeta = true;
+	double qualityHint = 0.0;
+};
+
+struct ofxGgmlRagHtmlRobotsPolicy {
+	bool noindex = false;
+	bool nofollow = false;
+};
+
+struct ofxGgmlRagHtmlDocument {
+	bool success = false;
+	std::string sourceUrl;
+	std::string title;
+	std::string error;
+	ofxGgmlRagDocument document;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
+struct ofxGgmlRagHtmlLinkOptions {
+	bool sameOriginOnly = true;
+	bool includeFragments = false;
+	bool respectRobotsMeta = true;
+	bool respectRobotsTxt = true;
+	std::string robotsTxt;
+	std::string robotsTxtUserAgent = "*";
+	std::size_t maxLinks = 64;
+	std::vector<std::string> allowedUrlPrefixes;
+	std::vector<std::string> excludedUrlPrefixes;
+};
+
+struct ofxGgmlRagHtmlLinkDecision {
+	bool accepted = false;
+	std::string href;
+	std::string url;
+	std::string reason;
+};
+
+struct ofxGgmlRagHtmlLinkFrontierStats {
+	std::size_t discoveredLinkCount = 0;
+	std::size_t acceptedLinkCount = 0;
+	std::size_t skippedLinkCount = 0;
+	std::size_t duplicateLinkCount = 0;
+	std::size_t invalidLinkCount = 0;
+	std::size_t offOriginLinkCount = 0;
+	std::size_t scopeBlockedLinkCount = 0;
+	std::size_t robotsBlockedLinkCount = 0;
+	bool robotsMetaNofollow = false;
+	bool maxLinksReached = false;
+};
+
+struct ofxGgmlRagHtmlLinkFrontier {
+	bool success = false;
+	std::string sourceUrl;
+	std::string error;
+	ofxGgmlRagHtmlLinkFrontierStats stats;
+	std::vector<std::string> links;
+	std::vector<ofxGgmlRagHtmlLinkDecision> decisions;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
+struct ofxGgmlRagHtmlPage {
+	std::string sourceUrl;
+	std::string html;
+};
+
+struct ofxGgmlRagHtmlBatchOptions {
+	ofxGgmlRagHtmlOptions document;
+	ofxGgmlRagHtmlLinkOptions links;
+	std::size_t maxPages = 32;
+	bool collectLinks = true;
+};
+
+struct ofxGgmlRagHtmlBatchStats {
+	std::size_t pageCount = 0;
+	std::size_t loadedDocumentCount = 0;
+	std::size_t skippedPageCount = 0;
+	std::size_t linkCount = 0;
+};
+
+struct ofxGgmlRagHtmlBatch {
+	bool success = false;
+	std::string error;
+	std::vector<std::string> warnings;
+	ofxGgmlRagHtmlBatchStats stats;
+	std::vector<ofxGgmlRagDocument> documents;
+	std::vector<std::string> links;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
+struct ofxGgmlRagRobotsTxtRule {
+	std::string pathPrefix;
+	bool allow = false;
+};
+
+struct ofxGgmlRagRobotsTxtPolicy {
+	bool success = false;
+	std::string userAgent;
+	std::vector<ofxGgmlRagRobotsTxtRule> rules;
+
+	explicit operator bool() const {
+		return success;
+	}
+};
+
 struct ofxGgmlRagValidation {
 	bool valid = false;
 	std::vector<std::string> errors;
@@ -245,6 +362,8 @@ struct ofxGgmlRagRetrievalOptions {
 	ofxGgmlRagChunkOptions chunk;
 	ofxGgmlRagSearchOptions search;
 	ofxGgmlRagContextOptions context;
+	bool enableCache = true;
+	std::size_t maxCacheEntries = 64;
 };
 
 struct ofxGgmlRagReportOptions {
@@ -263,6 +382,7 @@ struct ofxGgmlRagRetrievalStats {
 	std::size_t hitCount = 0;
 	std::size_t citationCount = 0;
 	bool contextTruncated = false;
+	bool cacheHit = false;
 };
 
 struct ofxGgmlRagResult {

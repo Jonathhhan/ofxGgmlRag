@@ -12,9 +12,17 @@ Current addon API version: `1.0.1`.
 
 - stateful `ofxGgmlRag` addon facade for apps and examples
 - citation-grounded LLM prompt handoff builder
+- pluggable model-backed answer generation callback
+- one-call retrieval and model-backed answer helpers
 - deterministic extractive answer draft builder
 - document ingestion workflow boundary
 - deterministic local text-corpus loading bridge
+- deterministic offline HTML-to-document ingestion bridge
+- deterministic offline HTML link-frontier extraction
+- scoped offline HTML link-frontier filtering
+- robots-meta-aware offline HTML ingestion policy
+- deterministic offline robots.txt policy checks
+- deterministic offline HTML page-batch ingestion snapshots
 - direct source-root text-corpus retrieval helper
 - local search and retrieval
 - deterministic request validation
@@ -25,6 +33,8 @@ Current addon API version: `1.0.1`.
 - cosine similarity and embedded chunk vector search helpers
 - local citation intent detection and exact-quote citation search
 - citation confidence, source credibility, and source diversity metrics
+- facade-level retrieval cache with cache-hit diagnostics
+- facade-level retrieval cache introspection
 - minimum-score retrieval filtering
 - minimum matched-term retrieval filtering
 - excluded-tag retrieval filtering
@@ -107,6 +117,29 @@ artifacts.
 deterministic retrieval for apps and examples that do not need to inspect the
 intermediate document list.
 
+`ofxGgmlRagUtils::htmlToText(...)` and `documentFromHtml(...)` provide the
+offline web-ingestion boundary: pass already-fetched HTML plus its source URL to
+produce a citation-ready `ofxGgmlRagDocument`. Live crawling/fetching remains an
+opt-in app or future scraper layer.
+Use `extractHtmlLinks(...)` on the same already-fetched HTML to build a
+deterministic same-origin URL frontier for that future scraper layer.
+Use `planHtmlLinkFrontier(...)` when UI or logs need per-link accept/skip
+diagnostics for that same frontier.
+Configure `allowedUrlPrefixes` and `excludedUrlPrefixes` to keep that frontier
+inside known-safe paths such as docs pages while skipping private/generated
+areas.
+By default the HTML helpers honor robots meta directives: `noindex` pages are
+not converted into documents, and `nofollow` pages do not contribute links.
+Use `parseRobotsTxt(...)` and `robotsTxtAllows(...)` with already-fetched
+robots.txt text to apply longest-prefix `Allow`/`Disallow` policy before adding
+URLs to a future crawl queue.
+Set `ofxGgmlRagHtmlLinkOptions::robotsTxt` and `robotsTxtUserAgent` to apply
+that same already-fetched robots.txt policy directly during link-frontier
+extraction and page-batch snapshots.
+Use `documentsFromHtmlPages(...)` when an app already has multiple fetched pages
+and wants RAG documents plus a deduped aggregate link frontier in one offline
+snapshot.
+
 Use the `ofxGgmlRag` class when building an app: set a query/source root or
 in-memory documents, tune `getRetrievalOptions()`, call `retrieve()` or
 `search(...)`, then read `getLastRetrieval()`, `summarize()`, `format(...)`, or
@@ -114,6 +147,15 @@ in-memory documents, tune `getRetrievalOptions()`, call `retrieve()` or
 can be handed to a future local LLM backend. Call `draftAnswer()` when you want
 an explicit extractive, citation-backed answer draft from the current retrieval
 without claiming model generation.
+
+To connect a ggml/GGUF text-generation backend, configure
+`setPromptGenerator(...)` with a callback that sends `prompt.prompt` to the
+model and returns generated text, then call `generateAnswer()`. The addon keeps
+the retrieval/citation boundary here and leaves concrete model loading to the
+app or a model-family companion addon.
+
+Use `searchAndGenerateAnswer(...)` or `loadAndGenerateAnswer(...)` when an app
+wants retrieval and the configured model callback in one call.
 
 Call `findCitations()` to extract exact local quote candidates from the loaded
 documents, ranked by topic relevance, source credibility, confidence, and source

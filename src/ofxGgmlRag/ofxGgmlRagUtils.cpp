@@ -253,6 +253,431 @@ namespace ofxGgmlRagUtils {
 			return text.find('\0') != std::string::npos;
 		}
 
+		bool StartsWithAt(const std::string & text, std::size_t offset, const std::string & prefix) {
+			return offset + prefix.size() <= text.size() &&
+				text.compare(offset, prefix.size(), prefix) == 0;
+		}
+
+		std::string HtmlTagName(const std::string & html, std::size_t tagBegin) {
+			auto cursor = tagBegin + 1;
+			if (cursor < html.size() && html[cursor] == '/') {
+				++cursor;
+			}
+			while (cursor < html.size() && IsWhitespace(html[cursor])) {
+				++cursor;
+			}
+			std::string name;
+			while (cursor < html.size()) {
+				const auto ch = html[cursor];
+				if (!std::isalnum(static_cast<unsigned char>(ch))) {
+					break;
+				}
+				name.push_back(ToLowerAscii(ch));
+				++cursor;
+			}
+			return name;
+		}
+
+		bool IsHtmlBlockTag(const std::string & tagName) {
+			static const std::unordered_set<std::string> blockTags = {
+				"address", "article", "aside", "blockquote", "br", "dd", "div",
+				"dl", "dt", "figcaption", "figure", "footer", "h1", "h2", "h3",
+				"h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol",
+				"p", "pre", "section", "table", "tbody", "td", "tfoot", "th",
+				"thead", "tr", "ul"
+			};
+			return blockTags.find(tagName) != blockTags.end();
+		}
+
+		std::string RemoveHtmlElementBlocks(std::string html, const std::vector<std::string> & tagNames) {
+			auto lowered = LowerAscii(html);
+			for (const auto & tagName : tagNames) {
+				const auto openNeedle = "<" + tagName;
+				const auto closeNeedle = "</" + tagName + ">";
+				std::size_t searchBegin = 0;
+				while (searchBegin < lowered.size()) {
+					const auto open = lowered.find(openNeedle, searchBegin);
+					if (open == std::string::npos) {
+						break;
+					}
+					if (open + openNeedle.size() < lowered.size()) {
+						const auto next = lowered[open + openNeedle.size()];
+						if (std::isalnum(static_cast<unsigned char>(next)) || next == '-') {
+							searchBegin = open + openNeedle.size();
+							continue;
+						}
+					}
+					const auto close = lowered.find(closeNeedle, open + openNeedle.size());
+					const auto eraseEnd = close == std::string::npos
+						? lowered.find('>', open)
+						: close + closeNeedle.size();
+					if (eraseEnd == std::string::npos) {
+						html.erase(open);
+						lowered.erase(open);
+						break;
+					}
+					html.erase(open, eraseEnd - open);
+					lowered.erase(open, eraseEnd - open);
+					searchBegin = open;
+				}
+			}
+			return html;
+		}
+
+		char DecodeNumericHtmlEntity(const std::string & entity) {
+			if (entity.size() < 3 || entity[0] != '#') {
+				return '\0';
+			}
+			int value = 0;
+			std::size_t begin = 1;
+			const bool hex = begin < entity.size() && (entity[begin] == 'x' || entity[begin] == 'X');
+			if (hex) {
+				++begin;
+			}
+			for (std::size_t i = begin; i < entity.size(); ++i) {
+				const auto ch = entity[i];
+				int digit = -1;
+				if (ch >= '0' && ch <= '9') {
+					digit = ch - '0';
+				} else if (hex && ch >= 'a' && ch <= 'f') {
+					digit = 10 + ch - 'a';
+				} else if (hex && ch >= 'A' && ch <= 'F') {
+					digit = 10 + ch - 'A';
+				}
+				if (digit < 0) {
+					return '\0';
+				}
+				value = value * (hex ? 16 : 10) + digit;
+				if (value > 126) {
+					return ' ';
+				}
+			}
+			return value >= 0x20 && value <= 0x7e ? static_cast<char>(value) : ' ';
+		}
+
+		std::string DecodeHtmlEntities(const std::string & text) {
+			std::string decoded;
+			decoded.reserve(text.size());
+			for (std::size_t i = 0; i < text.size(); ++i) {
+				if (text[i] != '&') {
+					decoded.push_back(text[i]);
+					continue;
+				}
+				const auto semicolon = text.find(';', i + 1);
+				if (semicolon == std::string::npos || semicolon - i > 12) {
+					decoded.push_back(text[i]);
+					continue;
+				}
+				const auto entity = text.substr(i + 1, semicolon - i - 1);
+				const auto loweredEntity = LowerAscii(entity);
+				if (loweredEntity == "amp") {
+					decoded.push_back('&');
+				} else if (loweredEntity == "lt") {
+					decoded.push_back('<');
+				} else if (loweredEntity == "gt") {
+					decoded.push_back('>');
+				} else if (loweredEntity == "quot") {
+					decoded.push_back('"');
+				} else if (loweredEntity == "apos" || loweredEntity == "#39") {
+					decoded.push_back('\'');
+				} else if (loweredEntity == "nbsp") {
+					decoded.push_back(' ');
+				} else if (!loweredEntity.empty() && loweredEntity[0] == '#') {
+					decoded.push_back(DecodeNumericHtmlEntity(entity));
+				} else {
+					decoded.push_back('&');
+					decoded += entity;
+					decoded.push_back(';');
+				}
+				i = semicolon;
+			}
+			return decoded;
+		}
+
+		std::string CollapseTextWhitespace(const std::string & text) {
+			std::string collapsed;
+			collapsed.reserve(text.size());
+			bool lastWasSpace = false;
+			for (const auto ch : text) {
+				if (IsWhitespace(ch)) {
+					if (!lastWasSpace) {
+						collapsed.push_back(' ');
+						lastWasSpace = true;
+					}
+					continue;
+				}
+				lastWasSpace = false;
+				collapsed.push_back(ch);
+			}
+			return trim(collapsed);
+		}
+
+		std::string ExtractHtmlElementText(const std::string & html, const std::string & tagName) {
+			const auto lowered = LowerAscii(html);
+			const auto openNeedle = "<" + tagName;
+			const auto open = lowered.find(openNeedle);
+			if (open == std::string::npos) {
+				return "";
+			}
+			const auto contentBegin = lowered.find('>', open + openNeedle.size());
+			if (contentBegin == std::string::npos) {
+				return "";
+			}
+			const auto close = lowered.find("</" + tagName + ">", contentBegin + 1);
+			if (close == std::string::npos) {
+				return "";
+			}
+			return CollapseTextWhitespace(DecodeHtmlEntities(html.substr(contentBegin + 1, close - contentBegin - 1)));
+		}
+
+		std::string HtmlAttributeValue(const std::string & tag, const std::string & attributeName) {
+			const auto loweredTag = LowerAscii(tag);
+			const auto loweredAttribute = LowerAscii(attributeName);
+			std::size_t searchBegin = 0;
+			while (searchBegin < loweredTag.size()) {
+				const auto found = loweredTag.find(loweredAttribute, searchBegin);
+				if (found == std::string::npos) {
+					return "";
+				}
+				const auto beforeOk = found == 0 || !IsTokenChar(loweredTag[found - 1]);
+				const auto after = found + loweredAttribute.size();
+				const auto afterOk = after >= loweredTag.size() || !IsTokenChar(loweredTag[after]);
+				if (!beforeOk || !afterOk) {
+					searchBegin = found + loweredAttribute.size();
+					continue;
+				}
+
+				auto cursor = after;
+				while (cursor < tag.size() && IsWhitespace(tag[cursor])) {
+					++cursor;
+				}
+				if (cursor >= tag.size() || tag[cursor] != '=') {
+					return "";
+				}
+				++cursor;
+				while (cursor < tag.size() && IsWhitespace(tag[cursor])) {
+					++cursor;
+				}
+				if (cursor >= tag.size()) {
+					return "";
+				}
+
+				if (tag[cursor] == '"' || tag[cursor] == '\'') {
+					const auto quote = tag[cursor];
+					const auto valueBegin = cursor + 1;
+					const auto valueEnd = tag.find(quote, valueBegin);
+					return valueEnd == std::string::npos ? "" : tag.substr(valueBegin, valueEnd - valueBegin);
+				}
+
+				const auto valueBegin = cursor;
+				auto valueEnd = valueBegin;
+				while (valueEnd < tag.size() && !IsWhitespace(tag[valueEnd]) && tag[valueEnd] != '>') {
+					++valueEnd;
+				}
+				return tag.substr(valueBegin, valueEnd - valueBegin);
+			}
+			return "";
+		}
+
+		std::string UrlScheme(const std::string & url) {
+			const auto trimmed = trim(url);
+			const auto schemeEnd = trimmed.find("://");
+			if (schemeEnd == std::string::npos) {
+				return "";
+			}
+			return LowerAscii(trimmed.substr(0, schemeEnd));
+		}
+
+		bool HasHttpScheme(const std::string & url) {
+			const auto scheme = UrlScheme(url);
+			return scheme == "http" || scheme == "https";
+		}
+
+		std::size_t UrlPathBegin(const std::string & url) {
+			const auto schemeEnd = url.find("://");
+			if (schemeEnd == std::string::npos) {
+				return std::string::npos;
+			}
+			const auto authorityBegin = schemeEnd + 3;
+			const auto pathBegin = url.find_first_of("/?#", authorityBegin);
+			return pathBegin == std::string::npos ? url.size() : pathBegin;
+		}
+
+		std::string UrlOrigin(const std::string & url) {
+			const auto trimmed = trim(url);
+			const auto pathBegin = UrlPathBegin(trimmed);
+			if (pathBegin == std::string::npos || pathBegin == 0) {
+				return "";
+			}
+			return trimmed.substr(0, pathBegin);
+		}
+
+		std::string NormalizeUrlPath(const std::string & path) {
+			std::vector<std::string> parts;
+			std::size_t begin = 0;
+			while (begin <= path.size()) {
+				const auto end = path.find('/', begin);
+				const auto part = path.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+				if (!part.empty() && part != ".") {
+					if (part == "..") {
+						if (!parts.empty()) {
+							parts.pop_back();
+						}
+					} else {
+						parts.push_back(part);
+					}
+				}
+				if (end == std::string::npos) {
+					break;
+				}
+				begin = end + 1;
+			}
+
+			std::ostringstream normalized;
+			normalized << "/";
+			for (std::size_t i = 0; i < parts.size(); ++i) {
+				if (i > 0) {
+					normalized << "/";
+				}
+				normalized << parts[i];
+			}
+			return normalized.str();
+		}
+
+		std::string NormalizeAbsoluteWebUrl(const std::string & url, bool includeFragments) {
+			auto normalized = trim(url);
+			if (normalized.empty() || !HasHttpScheme(normalized)) {
+				return "";
+			}
+			if (!includeFragments) {
+				const auto fragment = normalized.find('#');
+				if (fragment != std::string::npos) {
+					normalized = normalized.substr(0, fragment);
+				}
+			}
+			const auto origin = UrlOrigin(normalized);
+			if (origin.empty()) {
+				return "";
+			}
+			auto pathAndQuery = normalized.substr(origin.size());
+			if (pathAndQuery.empty() || pathAndQuery[0] == '?' || pathAndQuery[0] == '#') {
+				pathAndQuery = "/" + pathAndQuery;
+			}
+			const auto query = pathAndQuery.find('?');
+			const auto path = query == std::string::npos ? pathAndQuery : pathAndQuery.substr(0, query);
+			const auto suffix = query == std::string::npos ? std::string() : pathAndQuery.substr(query);
+			return origin + NormalizeUrlPath(path) + suffix;
+		}
+
+		std::string ResolveHtmlLink(const std::string & sourceUrl, const std::string & href, bool includeFragments) {
+			auto decoded = trim(DecodeHtmlEntities(href));
+			if (decoded.empty() || decoded[0] == '#') {
+				return "";
+			}
+			const auto lowered = LowerAscii(decoded);
+			if (lowered.find("javascript:") == 0 || lowered.find("mailto:") == 0 || lowered.find("data:") == 0) {
+				return "";
+			}
+
+			const auto source = trim(sourceUrl);
+			const auto sourceScheme = UrlScheme(source);
+			const auto sourceOrigin = UrlOrigin(source);
+			if (StartsWithAt(decoded, 0, "//")) {
+				if (sourceScheme.empty()) {
+					return "";
+				}
+				return NormalizeAbsoluteWebUrl(sourceScheme + ":" + decoded, includeFragments);
+			}
+			if (HasHttpScheme(decoded)) {
+				return NormalizeAbsoluteWebUrl(decoded, includeFragments);
+			}
+			if (sourceOrigin.empty()) {
+				return "";
+			}
+			if (decoded[0] == '/') {
+				return NormalizeAbsoluteWebUrl(sourceOrigin + decoded, includeFragments);
+			}
+
+			const auto sourcePathBegin = UrlPathBegin(source);
+			auto basePath = std::string("/");
+			if (sourcePathBegin != std::string::npos && sourcePathBegin < source.size()) {
+				auto sourcePath = source.substr(sourcePathBegin);
+				const auto query = sourcePath.find_first_of("?#");
+				if (query != std::string::npos) {
+					sourcePath = sourcePath.substr(0, query);
+				}
+				const auto lastSlash = sourcePath.find_last_of('/');
+				basePath = lastSlash == std::string::npos ? "/" : sourcePath.substr(0, lastSlash + 1);
+			}
+			return NormalizeAbsoluteWebUrl(sourceOrigin + basePath + decoded, includeFragments);
+		}
+
+		std::vector<std::string> NormalizeUrlPrefixes(const std::vector<std::string> & prefixes) {
+			std::vector<std::string> normalized;
+			for (const auto & prefix : prefixes) {
+				const auto value = LowerAscii(trim(prefix));
+				if (value.empty()) {
+					continue;
+				}
+				if (std::find(normalized.begin(), normalized.end(), value) == normalized.end()) {
+					normalized.push_back(value);
+				}
+			}
+			return normalized;
+		}
+
+		bool UrlMatchesPrefix(const std::string & url, const std::vector<std::string> & prefixes) {
+			if (prefixes.empty()) {
+				return false;
+			}
+			const auto lowered = LowerAscii(url);
+			for (const auto & prefix : prefixes) {
+				if (lowered.find(prefix) == 0) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		std::string UrlPathAndQuery(const std::string & url) {
+			const auto normalized = NormalizeAbsoluteWebUrl(url, false);
+			const auto origin = UrlOrigin(normalized);
+			if (origin.empty() || normalized.size() <= origin.size()) {
+				return "/";
+			}
+			return normalized.substr(origin.size());
+		}
+
+		bool UserAgentMatches(const std::string & ruleAgent, const std::string & requestedAgent) {
+			const auto rule = LowerAscii(trim(ruleAgent));
+			const auto requested = LowerAscii(trim(requestedAgent));
+			if (rule.empty() || requested.empty()) {
+				return false;
+			}
+			return rule == "*" || requested.find(rule) != std::string::npos || rule.find(requested) != std::string::npos;
+		}
+
+		bool RobotsTxtPolicyAllowsUrl(const ofxGgmlRagRobotsTxtPolicy & policy, const std::string & url) {
+			if (!policy) {
+				return true;
+			}
+			const auto path = UrlPathAndQuery(url);
+			bool allowed = true;
+			std::size_t bestLength = 0;
+			for (const auto & rule : policy.rules) {
+				const auto prefix = trim(rule.pathPrefix);
+				if (prefix.empty() || path.find(prefix) != 0) {
+					continue;
+				}
+				const auto length = prefix.size();
+				if (length > bestLength || (length == bestLength && rule.allow)) {
+					bestLength = length;
+					allowed = rule.allow;
+				}
+			}
+			return allowed;
+		}
+
 		void AddWarning(ofxGgmlRagCorpus & corpus, const std::string & warning) {
 			if (std::find(corpus.warnings.begin(), corpus.warnings.end(), warning) == corpus.warnings.end()) {
 				corpus.warnings.push_back(warning);
@@ -711,6 +1136,375 @@ namespace ofxGgmlRagUtils {
 		}
 		corpus.success = true;
 		return corpus;
+	}
+
+	std::string htmlToText(const std::string & html) {
+		auto cleaned = RemoveHtmlElementBlocks(html, { "script", "style", "noscript", "head" });
+		std::string text;
+		text.reserve(cleaned.size());
+		for (std::size_t i = 0; i < cleaned.size(); ++i) {
+			if (cleaned[i] != '<') {
+				text.push_back(cleaned[i]);
+				continue;
+			}
+			if (StartsWithAt(cleaned, i, "<!--")) {
+				const auto end = cleaned.find("-->", i + 4);
+				if (end == std::string::npos) {
+					break;
+				}
+				i = end + 2;
+				continue;
+			}
+			const auto tagName = HtmlTagName(cleaned, i);
+			if (IsHtmlBlockTag(tagName)) {
+				text.push_back(' ');
+			}
+			const auto end = cleaned.find('>', i + 1);
+			if (end == std::string::npos) {
+				break;
+			}
+			i = end;
+			if (IsHtmlBlockTag(tagName)) {
+				text.push_back(' ');
+			}
+		}
+		return CollapseTextWhitespace(DecodeHtmlEntities(text));
+	}
+
+	ofxGgmlRagHtmlRobotsPolicy htmlRobotsPolicy(const std::string & html) {
+		ofxGgmlRagHtmlRobotsPolicy policy;
+		const auto lowered = LowerAscii(html);
+		std::size_t searchBegin = 0;
+		while (searchBegin < lowered.size()) {
+			const auto metaBegin = lowered.find("<meta", searchBegin);
+			if (metaBegin == std::string::npos) {
+				break;
+			}
+			if (metaBegin + 5 < lowered.size() && std::isalnum(static_cast<unsigned char>(lowered[metaBegin + 5]))) {
+				searchBegin = metaBegin + 5;
+				continue;
+			}
+			const auto tagEnd = lowered.find('>', metaBegin + 5);
+			if (tagEnd == std::string::npos) {
+				break;
+			}
+			const auto tag = html.substr(metaBegin, tagEnd - metaBegin + 1);
+			const auto name = LowerAscii(trim(DecodeHtmlEntities(HtmlAttributeValue(tag, "name"))));
+			const auto httpEquiv = LowerAscii(trim(DecodeHtmlEntities(HtmlAttributeValue(tag, "http-equiv"))));
+			if (name == "robots" || name == "googlebot" || httpEquiv == "x-robots-tag") {
+				const auto content = LowerAscii(DecodeHtmlEntities(HtmlAttributeValue(tag, "content")));
+				const auto directives = tokenize(content);
+				if (std::find(directives.begin(), directives.end(), "none") != directives.end()) {
+					policy.noindex = true;
+					policy.nofollow = true;
+				}
+				if (std::find(directives.begin(), directives.end(), "noindex") != directives.end()) {
+					policy.noindex = true;
+				}
+				if (std::find(directives.begin(), directives.end(), "nofollow") != directives.end()) {
+					policy.nofollow = true;
+				}
+			}
+			searchBegin = tagEnd + 1;
+		}
+		return policy;
+	}
+
+	ofxGgmlRagHtmlDocument documentFromHtml(
+		const std::string & sourceUrl,
+		const std::string & html,
+		const ofxGgmlRagHtmlOptions & options) {
+		ofxGgmlRagHtmlDocument result;
+		result.sourceUrl = trim(sourceUrl);
+		if (result.sourceUrl.empty()) {
+			result.error = "sourceUrl is required";
+			return result;
+		}
+		if (html.empty()) {
+			result.error = "html is required";
+			return result;
+		}
+		if (options.maxHtmlBytes > 0 && html.size() > options.maxHtmlBytes) {
+			result.error = "html exceeds maxHtmlBytes";
+			return result;
+		}
+		const auto robots = htmlRobotsPolicy(html);
+		if (options.respectRobotsMeta && robots.noindex) {
+			result.error = "html robots noindex";
+			return result;
+		}
+
+		result.title = ExtractHtmlElementText(html, "title");
+		auto bodyText = htmlToText(html);
+		if (options.includeTitleInText && !result.title.empty()) {
+			bodyText = CollapseTextWhitespace(result.title + " " + bodyText);
+		}
+		if (bodyText.empty()) {
+			result.error = "html text is empty";
+			return result;
+		}
+
+		result.document.source = result.sourceUrl;
+		result.document.text = bodyText;
+		result.document.tags = NormalizeTags(options.tags);
+		result.document.qualityHint = ClampUnit(options.qualityHint);
+		result.success = true;
+		return result;
+	}
+
+	ofxGgmlRagHtmlLinkFrontier planHtmlLinkFrontier(
+		const std::string & sourceUrl,
+		const std::string & html,
+		const ofxGgmlRagHtmlLinkOptions & options) {
+		ofxGgmlRagHtmlLinkFrontier frontier;
+		frontier.sourceUrl = trim(sourceUrl);
+		if (options.respectRobotsMeta && htmlRobotsPolicy(html).nofollow) {
+			frontier.stats.robotsMetaNofollow = true;
+			frontier.success = true;
+			return frontier;
+		}
+
+		const auto sourceOrigin = LowerAscii(UrlOrigin(frontier.sourceUrl));
+		if (sourceOrigin.empty()) {
+			frontier.error = "sourceUrl origin is required";
+			return frontier;
+		}
+
+		const auto cleaned = RemoveHtmlElementBlocks(html, { "script", "style", "noscript" });
+		const auto lowered = LowerAscii(cleaned);
+		const auto allowedPrefixes = NormalizeUrlPrefixes(options.allowedUrlPrefixes);
+		const auto excludedPrefixes = NormalizeUrlPrefixes(options.excludedUrlPrefixes);
+		const auto applyRobotsTxt = options.respectRobotsTxt && !trim(options.robotsTxt).empty();
+		const auto robotsTxtPolicy = applyRobotsTxt
+			? parseRobotsTxt(options.robotsTxt, options.robotsTxtUserAgent)
+			: ofxGgmlRagRobotsTxtPolicy();
+		std::unordered_set<std::string> seen;
+		std::size_t searchBegin = 0;
+		while (searchBegin < lowered.size()) {
+			const auto anchorBegin = lowered.find("<a", searchBegin);
+			if (anchorBegin == std::string::npos) {
+				break;
+			}
+			if (anchorBegin + 2 < lowered.size() && std::isalnum(static_cast<unsigned char>(lowered[anchorBegin + 2]))) {
+				searchBegin = anchorBegin + 2;
+				continue;
+			}
+			const auto tagEnd = lowered.find('>', anchorBegin + 2);
+			if (tagEnd == std::string::npos) {
+				break;
+			}
+			const auto tag = cleaned.substr(anchorBegin, tagEnd - anchorBegin + 1);
+			const auto loweredTag = LowerAscii(tag);
+			const auto href = loweredTag.find("href");
+			if (href == std::string::npos) {
+				searchBegin = tagEnd + 1;
+				continue;
+			}
+			auto cursor = href + 4;
+			while (cursor < loweredTag.size() && IsWhitespace(loweredTag[cursor])) {
+				++cursor;
+			}
+			if (cursor >= loweredTag.size() || loweredTag[cursor] != '=') {
+				searchBegin = tagEnd + 1;
+				continue;
+			}
+			++cursor;
+			while (cursor < tag.size() && IsWhitespace(tag[cursor])) {
+				++cursor;
+			}
+			if (cursor >= tag.size()) {
+				searchBegin = tagEnd + 1;
+				continue;
+			}
+
+			std::string hrefValue;
+			if (tag[cursor] == '"' || tag[cursor] == '\'') {
+				const auto quote = tag[cursor];
+				const auto valueBegin = cursor + 1;
+				const auto valueEnd = tag.find(quote, valueBegin);
+				if (valueEnd != std::string::npos) {
+					hrefValue = tag.substr(valueBegin, valueEnd - valueBegin);
+				}
+			} else {
+				const auto valueBegin = cursor;
+				auto valueEnd = valueBegin;
+				while (valueEnd < tag.size() && !IsWhitespace(tag[valueEnd]) && tag[valueEnd] != '>') {
+					++valueEnd;
+				}
+				hrefValue = tag.substr(valueBegin, valueEnd - valueBegin);
+			}
+
+			++frontier.stats.discoveredLinkCount;
+			ofxGgmlRagHtmlLinkDecision decision;
+			decision.href = hrefValue;
+			decision.url = ResolveHtmlLink(frontier.sourceUrl, hrefValue, options.includeFragments);
+			if (decision.url.empty()) {
+				decision.reason = "invalid href";
+				++frontier.stats.invalidLinkCount;
+			} else if (options.sameOriginOnly && LowerAscii(UrlOrigin(decision.url)) != sourceOrigin) {
+				decision.reason = "off origin";
+				++frontier.stats.offOriginLinkCount;
+			} else if (!allowedPrefixes.empty() && !UrlMatchesPrefix(decision.url, allowedPrefixes)) {
+				decision.reason = "outside allowed prefixes";
+				++frontier.stats.scopeBlockedLinkCount;
+			} else if (UrlMatchesPrefix(decision.url, excludedPrefixes)) {
+				decision.reason = "excluded prefix";
+				++frontier.stats.scopeBlockedLinkCount;
+			} else if (applyRobotsTxt && !RobotsTxtPolicyAllowsUrl(robotsTxtPolicy, decision.url)) {
+				decision.reason = "robots.txt disallow";
+				++frontier.stats.robotsBlockedLinkCount;
+			} else if (!seen.insert(LowerAscii(decision.url)).second) {
+				decision.reason = "duplicate";
+				++frontier.stats.duplicateLinkCount;
+			} else if (frontier.links.size() >= options.maxLinks) {
+				decision.reason = "maxLinks reached";
+				frontier.stats.maxLinksReached = true;
+			} else {
+				decision.accepted = true;
+				decision.reason = "accepted";
+				frontier.links.push_back(decision.url);
+				++frontier.stats.acceptedLinkCount;
+			}
+			if (!decision.accepted) {
+				++frontier.stats.skippedLinkCount;
+			}
+			frontier.decisions.push_back(decision);
+			searchBegin = tagEnd + 1;
+		}
+		frontier.success = true;
+		return frontier;
+	}
+
+	std::vector<std::string> extractHtmlLinks(
+		const std::string & sourceUrl,
+		const std::string & html,
+		const ofxGgmlRagHtmlLinkOptions & options) {
+		return planHtmlLinkFrontier(sourceUrl, html, options).links;
+	}
+
+	ofxGgmlRagHtmlBatch documentsFromHtmlPages(
+		const std::vector<ofxGgmlRagHtmlPage> & pages,
+		const ofxGgmlRagHtmlBatchOptions & options) {
+		ofxGgmlRagHtmlBatch batch;
+		batch.stats.pageCount = pages.size();
+		if (pages.empty()) {
+			batch.error = "no HTML pages";
+			return batch;
+		}
+		if (options.maxPages == 0) {
+			batch.error = "maxPages is zero";
+			return batch;
+		}
+
+		std::unordered_set<std::string> seenLinks;
+		const auto pageCount = std::min(options.maxPages, pages.size());
+		if (pageCount < pages.size()) {
+			batch.stats.skippedPageCount += pages.size() - pageCount;
+			batch.warnings.push_back("skipped HTML pages beyond maxPages");
+		}
+
+		for (std::size_t i = 0; i < pageCount; ++i) {
+			const auto converted = documentFromHtml(pages[i].sourceUrl, pages[i].html, options.document);
+			if (!converted) {
+				++batch.stats.skippedPageCount;
+				const auto label = trim(pages[i].sourceUrl).empty() ? std::string("page #") + std::to_string(i) : trim(pages[i].sourceUrl);
+				batch.warnings.push_back(label + ": " + (converted.error.empty() ? "HTML conversion failed" : converted.error));
+				continue;
+			}
+			batch.documents.push_back(converted.document);
+
+			if (!options.collectLinks || batch.links.size() >= options.links.maxLinks) {
+				continue;
+			}
+			auto linkOptions = options.links;
+			const auto links = extractHtmlLinks(converted.sourceUrl, pages[i].html, linkOptions);
+			for (const auto & link : links) {
+				if (batch.links.size() >= options.links.maxLinks) {
+					break;
+				}
+				if (seenLinks.insert(LowerAscii(link)).second) {
+					batch.links.push_back(link);
+				}
+			}
+		}
+
+		batch.stats.loadedDocumentCount = batch.documents.size();
+		batch.stats.linkCount = batch.links.size();
+		if (batch.documents.empty()) {
+			batch.error = "no HTML documents";
+			return batch;
+		}
+		batch.success = true;
+		return batch;
+	}
+
+	ofxGgmlRagRobotsTxtPolicy parseRobotsTxt(
+		const std::string & robotsTxt,
+		const std::string & userAgent) {
+		ofxGgmlRagRobotsTxtPolicy policy;
+		policy.userAgent = trim(userAgent).empty() ? "*" : trim(userAgent);
+		if (trim(robotsTxt).empty()) {
+			policy.success = true;
+			return policy;
+		}
+
+		std::istringstream lines(robotsTxt);
+		std::string line;
+		bool groupMatches = false;
+		bool groupHasRules = false;
+		while (std::getline(lines, line)) {
+			const auto comment = line.find('#');
+			if (comment != std::string::npos) {
+				line = line.substr(0, comment);
+			}
+			line = trim(line);
+			if (line.empty()) {
+				groupMatches = false;
+				groupHasRules = false;
+				continue;
+			}
+
+			const auto colon = line.find(':');
+			if (colon == std::string::npos) {
+				continue;
+			}
+			const auto field = LowerAscii(trim(line.substr(0, colon)));
+			auto value = trim(line.substr(colon + 1));
+			if (field == "user-agent") {
+				if (groupHasRules) {
+					groupMatches = false;
+					groupHasRules = false;
+				}
+				groupMatches = groupMatches || UserAgentMatches(value, policy.userAgent);
+				continue;
+			}
+			if (field != "allow" && field != "disallow") {
+				continue;
+			}
+			groupHasRules = true;
+			if (!groupMatches) {
+				continue;
+			}
+			value = trim(DecodeHtmlEntities(value));
+			if (value.empty()) {
+				continue;
+			}
+			ofxGgmlRagRobotsTxtRule rule;
+			rule.pathPrefix = value[0] == '/' ? value : "/" + value;
+			rule.allow = field == "allow";
+			policy.rules.push_back(rule);
+		}
+
+		policy.success = true;
+		return policy;
+	}
+
+	bool robotsTxtAllows(
+		const std::string & url,
+		const std::string & robotsTxt,
+		const std::string & userAgent) {
+		const auto policy = parseRobotsTxt(robotsTxt, userAgent);
+		return RobotsTxtPolicyAllowsUrl(policy, url);
 	}
 
 	std::vector<ofxGgmlRagChunk> chunkText(
