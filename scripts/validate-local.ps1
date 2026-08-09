@@ -75,6 +75,9 @@ Assert-Path (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagTypes.h") "types hea
 Assert-Path (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRag.cpp") "facade source"
 Assert-Path (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagUtils.h") "utility header"
 Assert-Path (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagUtils.cpp") "utility source"
+Assert-Path (Join-Path $addonRoot "scripts\run-model-backed-rag-smoke.ps1") "model-backed RAG smoke"
+Assert-Path (Join-Path $addonRoot "scripts\run-model-backed-rag-smoke.bat") "model-backed RAG smoke launcher"
+Assert-FileContains (Join-Path $addonRoot "README.md") "run-model-backed-rag-smoke" "README model-backed smoke"
 
 Write-Step "Checking dependency layout"
 Assert-Path (Join-Path $addonsRoot "ofxGgmlCore") "sibling ofxGgmlCore addon" -Directory

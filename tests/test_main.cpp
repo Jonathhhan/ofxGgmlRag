@@ -28,12 +28,11 @@ namespace {
 		const auto query = ArgumentValue(argc, argv, "--query");
 		const auto sourceRoot = ArgumentValue(argc, argv, "--source-root");
 		const auto json = HasArgument(argc, argv, "--json");
-		const auto corpus = ofxGgmlRagUtils::loadTextCorpus(sourceRoot);
 
 		ofxGgmlRagRetrieval retrieval;
 		ofxGgmlRagRequest request;
 		request.query = query.empty() ? "citation memory" : query;
-		request.sourceRoot = corpus ? corpus.sourceRoot : sourceRoot;
+		request.sourceRoot = sourceRoot;
 		retrieval = ofxGgmlRagUtils::retrieveTextCorpus(request);
 
 		ofxGgmlRagReportOptions reportOptions;
@@ -486,6 +485,15 @@ int main(int argc, char ** argv) {
 	}
 	if (chunks.back().end != std::string("Alpha beta gamma delta epsilon zeta.").size()) {
 		std::cerr << "final chunk did not preserve source end offset\n";
+		return 1;
+	}
+	const auto trailingWhitespaceChunks = ofxGgmlRagUtils::chunkText(
+		"docs/short.md",
+		"A short document ending with a newline.\n",
+		ofxGgmlRagChunkOptions());
+	if (trailingWhitespaceChunks.size() != 1 ||
+		trailingWhitespaceChunks[0].end != std::string("A short document ending with a newline.").size()) {
+		std::cerr << "chunking did not terminate at trailing whitespace\n";
 		return 1;
 	}
 

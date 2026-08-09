@@ -1544,12 +1544,19 @@ namespace ofxGgmlRagUtils {
 			chunk.tags = normalizedTags;
 			chunks.push_back(chunk);
 
-			if (end >= text.size()) {
+			auto nextBegin = end;
+			while (nextBegin < text.size() && IsWhitespace(text[nextBegin])) {
+				++nextBegin;
+			}
+			if (nextBegin >= text.size()) {
 				break;
 			}
-			begin = end;
+			begin = nextBegin;
 			if (overlapChars > 0 && begin > overlapChars) {
 				begin -= overlapChars;
+			}
+			if (begin <= chunk.start) {
+				begin = nextBegin;
 			}
 		}
 

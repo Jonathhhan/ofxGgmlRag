@@ -174,3 +174,13 @@ deterministic text-corpus retrieval probe while keeping `ModelBacked=false` and
 ## Boundary
 
 Keep rag-specific preprocessing, postprocessing, model launch, media handling, and examples here. Move code down into `ofxGgmlCore` only when it becomes a stable, domain-neutral primitive with focused tests.
+
+# Model-backed corpus proof
+
+To prove the complete local path—text corpus, deterministic retrieval, cited context, and a real local model answer—run:
+
+```powershell
+scripts\run-model-backed-rag-smoke.ps1 -SourceRoot C:\path\to\corpus -Query "What is the observatory launch code?" -ExpectedAnswer "ORBIT-42" -ExpectedSource "launch.md" -Json
+```
+
+The smoke fails unless retrieval returns cited context and the model response contains both the expected answer and source filename. It uses the local OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1` by default.
