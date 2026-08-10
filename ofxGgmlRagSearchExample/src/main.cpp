@@ -9,6 +9,7 @@ int main(int argc, char ** argv) {
 		auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
 		if (arg == "--run-once" || arg == "--headless") runOnce = true;
 		else if (arg == "--query") config.query = next();
+		else if (arg == "--person") { config.person = next(); config.quoteMode = true; }
 		else if (arg == "--search-url-template") config.searchUrlTemplate = next();
 		else if (arg == "--user-agent") config.userAgent = next();
 		else if (arg == "--model") { config.model = next(); config.useModel = true; }

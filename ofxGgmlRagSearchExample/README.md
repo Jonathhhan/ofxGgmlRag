@@ -22,10 +22,20 @@ source diversity metrics.
 
 Live-web mode uses a configurable HTML search URL template, explicit User-Agent, timeouts, result/page/depth/byte limits, robots.txt and robots-meta checks, the existing HTML conversion utilities, deterministic retrieval, and exact URL citations. Search failures remain visible and never fall back to fixtures. Fetched content remains in memory and is never persisted by default.
 
+Enable `Person / quotes` and enter a name to search specifically for quotation sources. Results under `VERBATIM SOURCE EXCERPTS` are copied exactly from the fetched page and always include their URL; the label explicitly warns that attribution still requires reviewing that source. Optional model output appears separately as `MODEL SUMMARY — NOT A QUOTE` and must not be treated as wording by the person.
+
+Editable path/provider/model fields support normal Ctrl+V and also include a field-local `Paste` button. Pasting replaces the full field, which is intentional for paths, aliases, and URLs.
+
 Run the complete web path without a window:
 
 ```powershell
 bin\ofxGgmlRagSearchExample.exe --run-once --query "What is openFrameworks used for?"
+```
+
+For a headless quotation-source search:
+
+```powershell
+bin\ofxGgmlRagSearchExample.exe --run-once --person "Alan Kay" --max-pages 5
 ```
 
 Optional generation remains a generic OpenAI-compatible request. The canonical tested backend is CUDA-enabled `llama-server` from `ofxGgmlLlama` on port 8080:

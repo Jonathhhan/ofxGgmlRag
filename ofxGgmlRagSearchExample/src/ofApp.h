@@ -13,6 +13,7 @@ public:
 private:
 	void runRetrieval();
 	void runWebRetrieval();
+	bool inputTextWithPaste(const char * label, std::string & value);
 
 	std::string queryInput;
 	std::string queryVariantsInput;

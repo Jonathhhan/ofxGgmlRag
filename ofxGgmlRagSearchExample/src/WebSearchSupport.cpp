@@ -22,6 +22,27 @@ std::string stripTags(const std::string & value) {
 	return std::regex_replace(value, std::regex("<[^>]*>"), "");
 }
 
+std::string decodeHtml(std::string value) {
+	const std::vector<std::pair<std::string, std::string>> entities = {
+		{ "&#x27;", "'" }, { "&#39;", "'" }, { "&quot;", "\"" }, { "&amp;", "&" },
+		{ "&lt;", "<" }, { "&gt;", ">" }, { "&nbsp;", " " }
+	};
+	for (const auto & entity : entities) {
+		std::size_t position = 0;
+		while ((position = value.find(entity.first, position)) != std::string::npos) {
+			value.replace(position, entity.first.size(), entity.second); position += entity.second.size();
+		}
+	}
+	return value;
+}
+
+std::string absoluteUrl(const std::string & sourceUrl, const std::string & href) {
+	if (href.rfind("http://", 0) == 0 || href.rfind("https://", 0) == 0) return href;
+	auto scheme = sourceUrl.find("://"); if (scheme == std::string::npos) return "";
+	auto rootEnd = sourceUrl.find('/', scheme + 3); const auto root = rootEnd == std::string::npos ? sourceUrl : sourceUrl.substr(0, rootEnd);
+	return href.empty() ? std::string() : (href[0] == '/' ? root + href : root + "/" + href);
+}
+
 std::string resultUrl(std::string href) {
 	href = std::regex_replace(href, std::regex("&amp;"), "&");
 	auto marker = href.find("uddg=");
@@ -53,6 +74,13 @@ std::string expandSearchUrl(const std::string & urlTemplate, const std::string &
 	return result;
 }
 
+std::string quoteSearchQuery(const std::string & person) {
+	auto cleaned = person;
+	cleaned.erase(cleaned.begin(), std::find_if(cleaned.begin(), cleaned.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+	cleaned.erase(std::find_if(cleaned.rbegin(), cleaned.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), cleaned.end());
+	return cleaned.empty() ? std::string() : "\"" + cleaned + "\" quotes quotations";
+}
+
 std::vector<SearchHit> parseSearchHtml(const std::string & html, std::size_t maxResults) {
 	std::vector<SearchHit> hits;
 	std::set<std::string> seen;
@@ -65,6 +93,28 @@ std::vector<SearchHit> parseSearchHtml(const std::string & html, std::size_t max
 		hits.push_back({ stripTags((*it)[2].str()), url });
 	}
 	return hits;
+}
+
+std::vector<QuoteHit> extractStructuredQuotes(const std::string & sourceUrl, const std::string & html,
+	const std::string & person, std::size_t maxQuotes) {
+	std::vector<QuoteHit> quotes;
+	std::set<std::string> seen;
+	const std::regex anchor("<a([^>]*)>([\\s\\S]*?)</a>", std::regex::icase);
+	const std::regex hrefExpression("href=[\\\"']([^\\\"']+)[\\\"']", std::regex::icase);
+	for (auto it = std::sregex_iterator(html.begin(), html.end(), anchor); it != std::sregex_iterator() && quotes.size() < maxQuotes; ++it) {
+		const auto attributes = (*it)[1].str();
+		const bool brainyQuote = std::regex_search(attributes, std::regex("class=[\\\"'][^\\\"']*\\bb-qt\\b", std::regex::icase));
+		const bool attributedTitle = std::regex_search(attributes, std::regex("class=[\\\"'][^\\\"']*\\btitle\\b", std::regex::icase)) &&
+			attributes.find("data-author=\"" + person + "\"") != std::string::npos;
+		if (!brainyQuote && !attributedTitle) continue;
+		std::smatch hrefMatch; if (!std::regex_search(attributes, hrefMatch, hrefExpression)) continue;
+		auto text = decodeHtml(stripTags((*it)[2].str()));
+		text = std::regex_replace(text, std::regex("\\s+"), " ");
+		if (text.size() < 12 || !seen.insert(text).second) continue;
+		auto url = absoluteUrl(sourceUrl, decodeHtml(hrefMatch[1].str())); if (url.empty()) continue;
+		quotes.push_back({ text, url });
+	}
+	return quotes;
 }
 
 bool withinBounds(std::size_t acceptedPages, std::size_t totalBytes, std::size_t depth,

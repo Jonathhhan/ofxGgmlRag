@@ -135,6 +135,21 @@ void ofApp::runWebRetrieval() {
 	}
 }
 
+bool ofApp::inputTextWithPaste(const char * label, std::string & value) {
+	bool changed = ImGui::InputText(label, &value);
+	if (ImGui::IsItemActive() && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
+		value = ofGetWindowPtr()->getClipboardString();
+		changed = true;
+	}
+	ImGui::SameLine();
+	const std::string buttonLabel = std::string("Paste##") + label;
+	if (ImGui::SmallButton(buttonLabel.c_str())) {
+		value = ofGetWindowPtr()->getClipboardString();
+		changed = true;
+	}
+	return changed;
+}
+
 void ofApp::draw() {
 	ofBackground(18);
 
@@ -150,22 +165,24 @@ void ofApp::draw() {
 		if (!webMode) {
 			ImGui::InputText("Query", &queryInput);
 			ImGui::InputText("Variants", &queryVariantsInput);
-			ImGui::InputText("Source root", &sourceRootInput);
+			inputTextWithPaste("Source root", sourceRootInput);
 			ImGui::SliderInt("Top K", &topK, 1, 10);
 			ImGui::Checkbox("Context", &includeContext);
 			ImGui::Checkbox("Quality rank", &useQualityRanking);
 		} else {
-			ImGui::InputText("Web query", &webConfig.query);
-			ImGui::InputText("Search URL template", &webConfig.searchUrlTemplate);
-			ImGui::InputText("User-Agent", &webConfig.userAgent);
+			ImGui::Checkbox("Person / quotes", &webConfig.quoteMode);
+			if (webConfig.quoteMode) inputTextWithPaste("Person", webConfig.person);
+			else ImGui::InputText("Web query", &webConfig.query);
+			inputTextWithPaste("Search URL template", webConfig.searchUrlTemplate);
+			inputTextWithPaste("User-Agent", webConfig.userAgent);
 			ImGui::SliderInt("Timeout seconds", &webConfig.timeoutSeconds, 2, 30);
 			int results = static_cast<int>(webConfig.limits.maxSearchResults), pages = static_cast<int>(webConfig.limits.maxPages), depth = static_cast<int>(webConfig.limits.maxDepth);
 			if (ImGui::SliderInt("Search results", &results, 1, 10)) webConfig.limits.maxSearchResults = results;
 			if (ImGui::SliderInt("Pages", &pages, 1, 10)) webConfig.limits.maxPages = pages;
 			if (ImGui::SliderInt("Same-origin depth", &depth, 0, 2)) webConfig.limits.maxDepth = depth;
 			ImGui::Checkbox("Generate via OpenAI-compatible endpoint", &webConfig.useModel);
-			ImGui::InputText("Model alias", &webConfig.model);
-			ImGui::InputText("Chat completions endpoint", &webConfig.modelEndpoint);
+			inputTextWithPaste("Model alias / path", webConfig.model);
+			inputTextWithPaste("Chat completions endpoint", webConfig.modelEndpoint);
 		}
 		if (ImGui::Button("Run")) {
 			if (webMode) runWebRetrieval(); else runRetrieval();

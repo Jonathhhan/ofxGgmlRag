@@ -1223,6 +1223,20 @@ int main(int argc, char ** argv) {
 		std::cerr << "web example query URL expansion changed unexpectedly\n";
 		return 1;
 	}
+	if (ragWebExample::quoteSearchQuery("  Alan Kay ") != "\"Alan Kay\" quotes quotations" ||
+		!ragWebExample::quoteSearchQuery("   ").empty()) {
+		std::cerr << "web example quote query transformation failed\n";
+		return 1;
+	}
+	const auto structuredQuotes = ragWebExample::extractStructuredQuotes("https://quotes.test/alan",
+		"<a href=\"/q/1\" class=\"b-qt item\" title=\"view quote\">Exact &quot;words&quot; here.</a>"
+		"<a class=\"title\" data-author=\"Alan Kay\" href=\"/q/2\">A second exact quotation.</a>"
+		"<a class=\"title\" data-author=\"Other\" href=\"/q/3\">Wrong person.</a>", "Alan Kay", 3);
+	if (structuredQuotes.size() != 2 || structuredQuotes[0].text != "Exact \"words\" here." ||
+		structuredQuotes[0].url != "https://quotes.test/q/1" || structuredQuotes[1].url != "https://quotes.test/q/2") {
+		std::cerr << "web example structured quote extraction failed\n";
+		return 1;
+	}
 	const auto parsedSearch = ragWebExample::parseSearchHtml(
 		"<a href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fdocs\">Example <b>Docs</b></a>"
 		"<a href=\"https://second.example/page\">Second</a>", 1);
