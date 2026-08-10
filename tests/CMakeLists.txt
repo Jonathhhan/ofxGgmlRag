@@ -9,8 +9,13 @@ add_executable(ofxGgmlRag_tests
 	../src/ofxGgmlRag/ofxGgmlRag.cpp
 	../src/ofxGgmlRag/ofxGgmlRagUtils.cpp)
 
+target_sources(ofxGgmlRag_tests PRIVATE
+	../ofxGgmlRagSearchExample/src/WebSearchSupport.cpp)
+
 target_include_directories(ofxGgmlRag_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_include_directories(ofxGgmlRag_tests PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/../ofxGgmlRagSearchExample/src)
 
 enable_testing()
 add_test(NAME ofxGgmlRag_tests COMMAND ofxGgmlRag_tests)

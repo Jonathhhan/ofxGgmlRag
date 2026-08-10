@@ -1,4 +1,5 @@
 #include "ofxGgmlRag.h"
+#include "WebSearchSupport.h"
 
 #include <filesystem>
 #include <fstream>
@@ -1214,6 +1215,34 @@ int main(int argc, char ** argv) {
 	failed.error = "missing corpus";
 	if (ofxGgmlRagUtils::summarize(failed).find("missing corpus") == std::string::npos) {
 		std::cerr << "error summary did not include failure reason\n";
+		return 1;
+	}
+
+	const auto searchUrl = ragWebExample::expandSearchUrl("https://search.test/?q={query}", "RAG citations");
+	if (searchUrl != "https://search.test/?q=RAG%20citations") {
+		std::cerr << "web example query URL expansion changed unexpectedly\n";
+		return 1;
+	}
+	const auto parsedSearch = ragWebExample::parseSearchHtml(
+		"<a href=\"//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fdocs\">Example <b>Docs</b></a>"
+		"<a href=\"https://second.example/page\">Second</a>", 1);
+	if (parsedSearch.size() != 1 || parsedSearch[0].url != "https://example.com/docs" || parsedSearch[0].title != "Example Docs") {
+		std::cerr << "web example search parsing or result bound failed\n";
+		return 1;
+	}
+	ragWebExample::Limits webLimits; webLimits.maxPages = 2; webLimits.maxDepth = 1;
+	webLimits.maxBytesPerPage = 100; webLimits.maxTotalBytes = 150; std::string boundReason;
+	if (!ragWebExample::withinBounds(0, 0, 0, 100, webLimits, boundReason) ||
+		ragWebExample::withinBounds(2, 0, 0, 1, webLimits, boundReason) || boundReason != "page limit" ||
+		ragWebExample::withinBounds(0, 100, 0, 51, webLimits, boundReason) || boundReason != "total byte limit" ||
+		ragWebExample::withinBounds(0, 0, 2, 1, webLimits, boundReason) || boundReason != "depth limit") {
+		std::cerr << "web example crawl bounds failed\n";
+		return 1;
+	}
+	const std::string webRobots = "User-agent: *\nDisallow: /private\nAllow: /private/public\n";
+	if (ofxGgmlRagUtils::robotsTxtAllows("https://example.com/private/a", webRobots, "ofxGgmlRagWebSearchExample") ||
+		!ofxGgmlRagUtils::robotsTxtAllows("https://example.com/private/public/a", webRobots, "ofxGgmlRagWebSearchExample")) {
+		std::cerr << "web example robots policy integration failed\n";
 		return 1;
 	}
 

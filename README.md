@@ -69,7 +69,7 @@ Current addon API version: `1.0.1`.
 
 ## Example
 
-`ofxGgmlRagSearchExample` is a root-level citation search request smoke test. Generate it with the openFrameworks projectGenerator using addons `ofxGgmlRag`, `ofxGgmlCore`, and `ofxImGui`.
+`ofxGgmlRagSearchExample` is the single focused root-level RAG example. Its GUI switches between local text-corpus retrieval and opt-in live web search/scraping. The same example also provides a headless web proof and optional generic OpenAI-compatible generation. `llama-server` from `ofxGgmlLlama`, normally at `http://127.0.0.1:8080`, is the canonical documented backend; compatible servers can be selected by changing the endpoint without adding a provider-specific integration here. Generate the example with addons `ofxGgmlRag`, `ofxGgmlCore`, and `ofxImGui`.
 
 For RAG-lane planning, citation boundaries, and generated index rules, see
 [docs/RAG_WORKFLOWS.md](docs/RAG_WORKFLOWS.md).
@@ -183,4 +183,4 @@ To prove the complete local path—text corpus, deterministic retrieval, cited c
 scripts\run-model-backed-rag-smoke.ps1 -SourceRoot C:\path\to\corpus -Query "What is the observatory launch code?" -ExpectedAnswer "ORBIT-42" -ExpectedSource "launch.md" -Json
 ```
 
-The smoke fails unless retrieval returns cited context and the model response contains both the expected answer and source filename. It uses the local OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1` by default.
+The smoke fails unless retrieval returns the expected cited source and the model response contains the expected answer. It uses the OpenAI-compatible `llama-server` endpoint at `http://127.0.0.1:8080/v1` by default. Start the CUDA-enabled server through `ofxGgmlLlama/scripts/start-llama-server.ps1`, and pass its alias through `-Model` or `OFXGGML_TEXT_MODEL_ALIAS`.

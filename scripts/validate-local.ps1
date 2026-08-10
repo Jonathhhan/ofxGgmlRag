@@ -96,6 +96,8 @@ Assert-Path (Join-Path $exampleRoot "src\main.cpp") "smoke example main.cpp"
 Assert-Path (Join-Path $exampleRoot "src\ofApp.h") "smoke example ofApp.h"
 Assert-Path (Join-Path $exampleRoot "src\ofApp.cpp") "smoke example ofApp.cpp"
 Assert-Path (Join-Path $exampleRoot "README.md") "smoke example README"
+Assert-Path (Join-Path $exampleRoot "src\WebSearchRunner.cpp") "consolidated web runner"
+Assert-Path (Join-Path $exampleRoot "src\WebSearchSupport.cpp") "consolidated web support"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "rag\.retrieve" "smoke example ofApp.cpp"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "LLM Prompt" "smoke example ofApp.cpp"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "Answer Draft" "smoke example ofApp.cpp"
@@ -106,6 +108,8 @@ Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "cache=%s" "smoke e
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.h") "ofxImGui" "smoke example ofApp.h"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "OFXGGML_RAG_SOURCE_ROOT" "smoke example ofApp.cpp"
 Assert-FileContains (Join-Path $exampleRoot "README.md") "OFXGGML_RAG_SOURCE_ROOT" "smoke example README"
+Assert-FileContains (Join-Path $exampleRoot "README.md") "llama-server" "smoke example canonical backend"
+Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "Live web" "smoke example web mode"
 Assert-FileContains (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagUtils.h") "retrieveTextCorpus" "utility header"
 Assert-Path (Join-Path $addonRoot "tests\CMakeLists.txt") "test CMakeLists"
 Assert-Path (Join-Path $addonRoot "tests\test_main.cpp") "test source"
@@ -121,6 +125,10 @@ Assert-Path (Join-Path $scriptRoot "test-rag-runtime-smoke.ps1") "RAG runtime sm
 $nestedExamples = Join-Path $addonRoot "examples"
 if (Test-Path -LiteralPath $nestedExamples -PathType Container) {
 	throw "Examples should live at the addon root, not under: $nestedExamples"
+}
+$separateWebExample = Join-Path $addonRoot "ofxGgmlRagWebSearchExample"
+if (Test-Path -LiteralPath $separateWebExample) {
+	throw "Local and web RAG should remain consolidated in ofxGgmlRagSearchExample"
 }
 
 Write-Step "Checking generated artifact hygiene"

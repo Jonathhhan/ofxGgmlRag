@@ -3,6 +3,7 @@
 #include "ofMain.h"
 #include "ofxGgmlRag.h"
 #include "ofxImGui.h"
+#include "WebSearchRunner.h"
 
 class ofApp : public ofBaseApp {
 public:
@@ -11,6 +12,7 @@ public:
 
 private:
 	void runRetrieval();
+	void runWebRetrieval();
 
 	std::string queryInput;
 	std::string queryVariantsInput;
@@ -26,4 +28,7 @@ private:
 	bool useQualityRanking = true;
 	int topK = 3;
 	ofxImGui::Gui gui;
+	WebSearchConfig webConfig;
+	WebSearchRun webResult;
+	bool webMode = false;
 };

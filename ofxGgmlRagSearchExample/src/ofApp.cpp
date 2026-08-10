@@ -127,6 +127,14 @@ void ofApp::runRetrieval() {
 	}
 }
 
+void ofApp::runWebRetrieval() {
+	webResult = runWebSearch(webConfig);
+	status = webResult.success ? "Live web pipeline completed" : webResult.error;
+	if (!webResult.success) {
+		ofLogError("ofxGgmlRagSearchExample") << webResult.error;
+	}
+}
+
 void ofApp::draw() {
 	ofBackground(18);
 
@@ -136,21 +144,38 @@ void ofApp::draw() {
 	if (ImGui::Begin("ofxGgmlRag Search Example")) {
 		ImGui::TextUnformatted("Retrieval Request");
 		ImGui::Separator();
-		ImGui::InputText("Query", &queryInput);
-		ImGui::InputText("Variants", &queryVariantsInput);
-		ImGui::InputText("Source root", &sourceRootInput);
-		ImGui::SliderInt("Top K", &topK, 1, 10);
-		ImGui::Checkbox("Context", &includeContext);
-		ImGui::Checkbox("Quality rank", &useQualityRanking);
+		if (ImGui::RadioButton("Local corpus", !webMode)) webMode = false;
+		ImGui::SameLine();
+		if (ImGui::RadioButton("Live web", webMode)) webMode = true;
+		if (!webMode) {
+			ImGui::InputText("Query", &queryInput);
+			ImGui::InputText("Variants", &queryVariantsInput);
+			ImGui::InputText("Source root", &sourceRootInput);
+			ImGui::SliderInt("Top K", &topK, 1, 10);
+			ImGui::Checkbox("Context", &includeContext);
+			ImGui::Checkbox("Quality rank", &useQualityRanking);
+		} else {
+			ImGui::InputText("Web query", &webConfig.query);
+			ImGui::InputText("Search URL template", &webConfig.searchUrlTemplate);
+			ImGui::InputText("User-Agent", &webConfig.userAgent);
+			ImGui::SliderInt("Timeout seconds", &webConfig.timeoutSeconds, 2, 30);
+			int results = static_cast<int>(webConfig.limits.maxSearchResults), pages = static_cast<int>(webConfig.limits.maxPages), depth = static_cast<int>(webConfig.limits.maxDepth);
+			if (ImGui::SliderInt("Search results", &results, 1, 10)) webConfig.limits.maxSearchResults = results;
+			if (ImGui::SliderInt("Pages", &pages, 1, 10)) webConfig.limits.maxPages = pages;
+			if (ImGui::SliderInt("Same-origin depth", &depth, 0, 2)) webConfig.limits.maxDepth = depth;
+			ImGui::Checkbox("Generate via OpenAI-compatible endpoint", &webConfig.useModel);
+			ImGui::InputText("Model alias", &webConfig.model);
+			ImGui::InputText("Chat completions endpoint", &webConfig.modelEndpoint);
+		}
 		if (ImGui::Button("Run")) {
-			runRetrieval();
+			if (webMode) runWebRetrieval(); else runRetrieval();
 		}
 
 		ImGui::Spacing();
 		ImGui::TextUnformatted("Status");
 		ImGui::Separator();
 		ImGui::TextWrapped("%s", status.c_str());
-		ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu cache=%s",
+		if (!webMode) ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu cache=%s",
 			rag.getLastRetrieval().stats.documentCount,
 			rag.getLastRetrieval().stats.scopedDocumentCount,
 			rag.getLastRetrieval().stats.skippedDocumentCount,
@@ -159,7 +184,11 @@ void ofApp::draw() {
 			rag.getLastRetrieval().stats.cacheHit ? "hit" : "miss");
 
 		ImGui::Spacing();
-		if (ImGui::BeginTabBar("rag-output")) {
+		if (webMode) {
+			ImGui::BeginChild("web-evidence", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::TextUnformatted(webResult.report.c_str());
+			ImGui::EndChild();
+		} else if (ImGui::BeginTabBar("rag-output")) {
 			if (ImGui::BeginTabItem("Retrieval")) {
 				ImGui::BeginChild("report", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
 				ImGui::TextWrapped("%s", report.c_str());

@@ -3,8 +3,8 @@ param(
 	[string]$Query = "What is the observatory launch code?",
 	[string]$ExpectedAnswer = "ORBIT-42",
 	[string]$ExpectedSource = "launch.md",
-	[string]$BaseUrl = "http://127.0.0.1:11434/v1",
-	[string]$Model = "qwen2.5-coder:3b",
+	[string]$BaseUrl = $(if ($env:OFXGGML_TEXT_SERVER_URL) { $env:OFXGGML_TEXT_SERVER_URL.TrimEnd("/") + "/v1" } else { "http://127.0.0.1:8080/v1" }),
+	[string]$Model = $(if ($env:OFXGGML_TEXT_MODEL_ALIAS) { $env:OFXGGML_TEXT_MODEL_ALIAS } else { "local-model" }),
 	[string]$BuildDir = "",
 	[switch]$Json
 )
@@ -46,9 +46,9 @@ $body = @{
 $response = Invoke-RestMethod -Uri ($BaseUrl.TrimEnd("/") + "/chat/completions") -Method Post -ContentType "application/json" -Body $body -TimeoutSec 120
 $answer = [string]$response.choices[0].message.content
 $answerVerified = $answer -match [regex]::Escape($ExpectedAnswer)
-$sourceVerified = $answer -match [regex]::Escape($sourceLeaf)
+$sourceVerified = [string]$retrieval.hits[0].source -match [regex]::Escape($sourceLeaf)
 if (!$answerVerified -or !$sourceVerified) {
-	throw "Model answer did not contain the expected answer and source. Received: $answer"
+	throw "Grounded proof did not contain the expected model answer and retrieved source. Received answer: $answer; retrieved source: $($retrieval.hits[0].source)"
 }
 
 $summary = [ordered]@{
