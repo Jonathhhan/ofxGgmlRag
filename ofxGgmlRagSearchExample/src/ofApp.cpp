@@ -181,7 +181,7 @@ void ofApp::draw() {
 			if (ImGui::SliderInt("Pages", &pages, 1, 10)) webConfig.limits.maxPages = pages;
 			if (ImGui::SliderInt("Same-origin depth", &depth, 0, 2)) webConfig.limits.maxDepth = depth;
 			ImGui::Checkbox("Generate via OpenAI-compatible endpoint", &webConfig.useModel);
-			inputTextWithPaste("Model alias / path", webConfig.model);
+			inputTextWithPaste("Model alias", webConfig.model);
 			inputTextWithPaste("Chat completions endpoint", webConfig.modelEndpoint);
 		}
 		if (ImGui::Button("Run")) {

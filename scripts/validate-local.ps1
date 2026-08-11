@@ -113,6 +113,7 @@ Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "Live web" "smoke e
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "Person / quotes" "smoke example quote mode"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "IsKeyChordPressed.*ImGuiMod_Ctrl.*ImGuiKey_V" "smoke example Ctrl+V path"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "Paste##" "smoke example explicit paste control"
+Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") 'inputTextWithPaste\("Model alias"' "smoke example server model alias"
 Assert-FileContains (Join-Path $exampleRoot "src\WebSearchRunner.cpp") "MODEL SUMMARY.*NOT A QUOTE" "smoke example quote/model distinction"
 Assert-FileContains (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagUtils.h") "retrieveTextCorpus" "utility header"
 Assert-Path (Join-Path $addonRoot "tests\CMakeLists.txt") "test CMakeLists"
