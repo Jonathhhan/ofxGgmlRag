@@ -1,8 +1,10 @@
 # ofxGgmlRag
 
-`ofxGgmlRag` is the companion addon for document ingestion, web crawl, chunking, embeddings, vector search, citations, and project memory workflows on top of `ofxGgmlCore`.
+`ofxGgmlRag` is the standalone companion addon for document ingestion, web crawl, chunking, embeddings, vector search, citations, and project memory workflows.
 
-`ofxGgmlCore` stays the dependency. This addon owns rag-specific workflow code so core can stay small and boring.
+It has no direct Core or ggml link dependency. Apps can combine it with
+`ofxGgmlLlama` or another local model addon through the existing generation
+callback while retrieval remains independently usable.
 
 Family map: https://jonathhhan.github.io/ofxGgmlCore/
 
@@ -69,7 +71,7 @@ Current addon API version: `1.0.1`.
 
 ## Example
 
-`ofxGgmlRagSearchExample` is the single focused root-level RAG example. Its GUI switches between local text-corpus retrieval and opt-in live web search/scraping. The same example also provides a headless web proof and optional generic OpenAI-compatible generation. `llama-server` from `ofxGgmlLlama`, normally at `http://127.0.0.1:8080`, is the canonical documented backend; compatible servers can be selected by changing the endpoint without adding a provider-specific integration here. Generate the example with addons `ofxGgmlRag`, `ofxGgmlCore`, and `ofxImGui`.
+`ofxGgmlRagSearchExample` is the single focused root-level RAG example. Its GUI switches between local text-corpus retrieval and opt-in live web search/scraping. The same example also provides a headless web proof and optional generic OpenAI-compatible generation. `llama-server` from `ofxGgmlLlama`, normally at `http://127.0.0.1:8080`, is the canonical documented backend; compatible servers can be selected by changing the endpoint without adding a provider-specific integration here. Generate the example with addons `ofxGgmlRag` and `ofxImGui`.
 
 For RAG-lane planning, citation boundaries, and generated index rules, see
 [docs/RAG_WORKFLOWS.md](docs/RAG_WORKFLOWS.md).
@@ -80,7 +82,6 @@ see [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 ## Dependencies
 
 - openFrameworks
-- `ofxGgmlCore`
 - `ofxImGui` for examples
 
 ## Validate

@@ -4,7 +4,7 @@
 
 - Seed the companion addon skeleton.
 - Keep `ofxGgmlRagSearchExample` as the first root-level smoke example.
-- Keep `ofxGgmlCore` as the only required library dependency; examples may depend on `ofxImGui`.
+- Keep retrieval independent of a concrete ggml runtime; examples may depend on `ofxImGui` and connect to model companions explicitly.
 - Add local validation and headless tests.
 - Add independent addon version metadata and release-candidate docs.
 - Add deterministic request validation, tag normalization, source-root scoped retrieval, excluded source-root filtering, local text-corpus loading, text chunking, in-memory search, minimum-score filtering, minimum matched-term filtering, excluded-tag filtering, phrase-aware scoring, search-hit excerpts, retrieval context assembly, in-memory retrieval pipeline, retrieval diagnostics, retrieval summary/report/JSON formatting, structured hit metadata and citation JSON output, pretty JSON reports, reference-aware retrieval reports, citation-aware result assembly, citation/reference formatting, and result summaries.

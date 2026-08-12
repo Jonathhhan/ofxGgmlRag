@@ -1,16 +1,19 @@
 # Architecture
 
-`ofxGgmlRag` owns rag-specific workflow code. It should use `ofxGgmlCore` for stable runtime primitives and keep model-family workflow details out of core.
+`ofxGgmlRag` owns retrieval-specific workflow code and has no direct ggml
+runtime dependency. Model-family workflow details stay in their companion
+addons.
 
 ## Dependency Direction
 
 ```text
 openFrameworks app
   -> ofxGgmlRag
-      -> ofxGgmlCore
+  -> optional local model companion
 ```
 
-No dependency should point from `ofxGgmlCore` back to `ofxGgmlRag`.
+The app-level generation callback is the handoff between retrieval and a local
+model companion; RAG does not link that companion transitively.
 
 ## Owned Here
 

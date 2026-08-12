@@ -33,8 +33,7 @@ function Get-PowerShellExecutable {
 function Test-RuntimeSmokeReady {
 	return (Test-Path -LiteralPath (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagTypes.h") -PathType Leaf) -and
 		(Test-Path -LiteralPath (Join-Path $addonRoot "src\ofxGgmlRag\ofxGgmlRagUtils.cpp") -PathType Leaf) -and
-		(Test-Path -LiteralPath (Join-Path $addonRoot "tests\test_main.cpp") -PathType Leaf) -and
-		(Test-Path -LiteralPath (Join-Path $addonsRoot "ofxGgmlCore") -PathType Container)
+		(Test-Path -LiteralPath (Join-Path $addonRoot "tests\test_main.cpp") -PathType Leaf)
 }
 
 function New-DryRunSummary {
@@ -119,7 +118,6 @@ function Get-TestExecutable {
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $addonRoot = Resolve-Path (Join-Path $scriptRoot "..")
-$addonsRoot = Split-Path -Parent $addonRoot
 $testScript = Join-Path $scriptRoot "test-addon.ps1"
 $doctorScript = Join-Path $scriptRoot "doctor-rag.ps1"
 

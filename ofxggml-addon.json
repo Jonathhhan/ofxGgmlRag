@@ -2,9 +2,7 @@
   "name": "ofxGgmlRag",
   "lane": "retrieval",
   "coreBaseline": "v1.0.1",
-  "requires": [
-    "ofxGgmlCore"
-  ],
+  "requires": [],
   "owns": [
     "retrieval",
     "citations",

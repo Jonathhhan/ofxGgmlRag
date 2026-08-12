@@ -5,12 +5,11 @@ request-boundary RAG lane and the local text-corpus bridge.
 
 ## Layout
 
-Clone `ofxGgmlCore` beside this addon. Install `ofxImGui` beside both addons
-before building the openFrameworks example.
+Install `ofxImGui` beside this addon before building the openFrameworks
+example. Core is not a direct build dependency.
 
 ```text
 addons/
-  ofxGgmlCore/
   ofxGgmlRag/
   ofxImGui/
 ```

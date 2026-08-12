@@ -35,12 +35,25 @@ function Assert-FileContains {
 		throw "$Label did not contain expected pattern: $Pattern"
 	}
 }
+function Assert-FileNotContains {
+	param(
+		[string]$Path,
+		[string]$Pattern,
+		[string]$Label
+	)
+
+	$content = Get-Content -LiteralPath $Path -Raw
+	if ($content -match $Pattern) {
+		throw "$Label contained forbidden pattern: $Pattern"
+	}
+}
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $addonRoot = Split-Path -Parent $scriptRoot
 $addonsRoot = Split-Path -Parent $addonRoot
 
 Write-Step "Checking addon skeleton"
 Assert-Path (Join-Path $addonRoot "addon_config.mk") "addon config"
+Assert-FileNotContains (Join-Path $addonRoot "addon_config.mk") "ADDON_DEPENDENCIES.*ofxGgmlCore" "addon config"
 Assert-Path (Join-Path $addonRoot "README.md") "README"
 Assert-Path (Join-Path $addonRoot "LICENSE") "license"
 Assert-Path (Join-Path $addonRoot "CHANGELOG.md") "changelog"
@@ -80,7 +93,6 @@ Assert-Path (Join-Path $addonRoot "scripts\run-model-backed-rag-smoke.bat") "mod
 Assert-FileContains (Join-Path $addonRoot "README.md") "run-model-backed-rag-smoke" "README model-backed smoke"
 
 Write-Step "Checking dependency layout"
-Assert-Path (Join-Path $addonsRoot "ofxGgmlCore") "sibling ofxGgmlCore addon" -Directory
 Assert-Path (Join-Path $addonsRoot "ofxImGui") "sibling ofxImGui addon for examples" -Directory
 
 Write-Step "Checking example layout"
@@ -88,7 +100,7 @@ $exampleRoot = Join-Path $addonRoot "ofxGgmlRagSearchExample"
 Assert-Path $exampleRoot "root-level smoke example" -Directory
 Assert-Path (Join-Path $exampleRoot "addons.make") "smoke example addons.make"
 Assert-Path (Join-Path $exampleRoot "config.make") "smoke example config.make"
-Assert-FileContains (Join-Path $exampleRoot "addons.make") "(?m)^ofxGgmlCore\s*$" "smoke example addons.make"
+Assert-FileNotContains (Join-Path $exampleRoot "addons.make") "(?m)^ofxGgmlCore\s*$" "smoke example addons.make"
 Assert-FileContains (Join-Path $exampleRoot "addons.make") "(?m)^ofxGgmlRag\s*$" "smoke example addons.make"
 Assert-FileContains (Join-Path $exampleRoot "addons.make") "(?m)^ofxImGui\s*$" "smoke example addons.make"
 Assert-FileContains (Join-Path $exampleRoot "config.make") "OFXIMGUI_GLFW_EVENTS_REPLACE_OF_CALLBACKS=0" "smoke example config.make"

@@ -1,3 +1,2 @@
-ofxGgmlCore
 ofxGgmlRag
 ofxImGui

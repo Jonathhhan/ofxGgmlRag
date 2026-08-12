@@ -11,7 +11,6 @@ if (!$?) {
 $text = $output -join "`n"
 foreach ($expected in @(
 	"ofxGgmlRag doctor",
-	"ofxGgmlCore sibling",
 	"search example",
 	"RAG request types",
 	"RAG query",
