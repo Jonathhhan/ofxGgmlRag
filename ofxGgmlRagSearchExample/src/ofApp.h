@@ -5,14 +5,19 @@
 #include "ofxImGui.h"
 #include "WebSearchRunner.h"
 
+#include <future>
+
 class ofApp : public ofBaseApp {
 public:
 	void setup() override;
+	void update() override;
 	void draw() override;
 
 private:
 	void runRetrieval();
 	void runWebRetrieval();
+	void browseForLocalModel();
+	void startLocalModelServer();
 	bool inputTextWithPaste(const char * label, std::string & value);
 
 	std::string queryInput;
@@ -31,5 +36,12 @@ private:
 	ofxImGui::Gui gui;
 	WebSearchConfig webConfig;
 	WebSearchRun webResult;
+	std::string localModelPath;
+	std::string modelServerOutput;
+	std::future<std::string> modelServerLaunch;
+	std::future<WebSearchRun> webSearchLaunch;
+	int localModelPort = 8092;
+	bool modelServerStarting = false;
+	bool webSearchRunning = false;
 	bool webMode = false;
 };

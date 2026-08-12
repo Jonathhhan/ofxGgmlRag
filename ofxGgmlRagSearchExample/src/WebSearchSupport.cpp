@@ -81,6 +81,21 @@ std::string quoteSearchQuery(const std::string & person) {
 	return cleaned.empty() ? std::string() : "\"" + cleaned + "\" quotes quotations";
 }
 
+std::string localModelAlias(const std::string & modelPath) {
+	const auto slash = modelPath.find_last_of("/\\");
+	auto name = slash == std::string::npos ? modelPath : modelPath.substr(slash + 1);
+	const auto dot = name.find_last_of('.');
+	if (dot != std::string::npos) name.resize(dot);
+	std::string slug;
+	for (const unsigned char ch : name) {
+		if (std::isalnum(ch) || ch == '.' || ch == '_' || ch == '-') slug.push_back(static_cast<char>(ch));
+		else if (!slug.empty() && slug.back() != '-') slug.push_back('-');
+	}
+	while (!slug.empty() && slug.front() == '-') slug.erase(slug.begin());
+	while (!slug.empty() && slug.back() == '-') slug.pop_back();
+	return slug.empty() ? std::string() : "local/" + slug;
+}
+
 std::vector<SearchHit> parseSearchHtml(const std::string & html, std::size_t maxResults) {
 	std::vector<SearchHit> hits;
 	std::set<std::string> seen;

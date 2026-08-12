@@ -2,7 +2,10 @@
 #include "ofMain.h"
 #include "ofxGgmlRag.h"
 
+#include <algorithm>
+#include <chrono>
 #include <deque>
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -24,19 +27,51 @@ std::string origin(const std::string & url) {
 
 std::string modelAnswer(const WebSearchConfig & c, const std::string & prompt, std::string & error) {
 	static ofURLFileLoader loader;
-	ofJson body = { {"model", c.model}, {"messages", {{{"role", "user"}, {"content", prompt}}}}, {"temperature", 0} };
+	ofJson body = {
+		{"model", c.model},
+		{"messages", {{{"role", "user"}, {"content", prompt}}}},
+		{"temperature", 0},
+		{"max_tokens", std::max(1, c.maxModelTokens)},
+		{"stream", false}
+	};
 	ofHttpRequest request(c.modelEndpoint, "model", false);
-	request.method = ofHttpRequest::POST; request.timeoutSeconds = c.timeoutSeconds;
+	request.method = ofHttpRequest::POST; request.timeoutSeconds = std::max(1, c.modelTimeoutSeconds);
 	request.headers["Content-Type"] = "application/json"; request.body = body.dump();
 	auto response = loader.handleRequest(request);
 	if (response.status < 200 || response.status >= 300) { error = "HTTP " + ofToString(response.status) + ": " + response.error; return ""; }
 	try { return ofJson::parse(response.data.getText())["choices"][0]["message"]["content"].get<std::string>(); }
 	catch (const std::exception & e) { error = e.what(); return ""; }
 }
+
+void diversifyRetrieval(ofxGgmlRagRetrieval & retrieval, const std::string & query, std::size_t maxHits) {
+	std::vector<ofxGgmlRagSearchHit> selected;
+	std::set<std::string> sources;
+	for (const auto & hit : retrieval.hits) {
+		if (sources.insert(hit.chunk.source).second) selected.push_back(hit);
+		if (selected.size() == maxHits) break;
+	}
+	if (selected.size() < maxHits) {
+		for (const auto & hit : retrieval.hits) {
+			const auto alreadySelected = std::find_if(selected.begin(), selected.end(), [&](const auto & value) {
+				return value.chunk.source == hit.chunk.source && value.chunk.index == hit.chunk.index;
+			});
+			if (alreadySelected == selected.end()) selected.push_back(hit);
+			if (selected.size() == maxHits) break;
+		}
+	}
+	retrieval.hits = std::move(selected);
+	retrieval.context = ofxGgmlRagUtils::contextFromHits(query, retrieval.hits);
+	retrieval.result = ofxGgmlRagUtils::resultFromHits(query, retrieval.hits);
+	retrieval.stats.hitCount = retrieval.hits.size();
+	retrieval.stats.citationCount = retrieval.context.citations.size();
+	retrieval.stats.contextTruncated = retrieval.context.truncated;
+}
 }
 
 WebSearchRun runWebSearch(const WebSearchConfig & c) {
 	WebSearchRun run; std::ostringstream log;
+	const auto fetchDeadline = std::chrono::steady_clock::now() +
+		std::chrono::seconds(std::max(1, c.totalFetchTimeoutSeconds));
 	const auto effectiveQuery = c.quoteMode ? ragWebExample::quoteSearchQuery(c.person) : c.query;
 	if (effectiveQuery.empty() || c.searchUrlTemplate.find("{query}") == std::string::npos) { run.error = c.quoteMode ? "a person is required for quote search" : "query and a search URL template containing {query} are required"; return run; }
 	const auto searchUrl = ragWebExample::expandSearchUrl(c.searchUrlTemplate, effectiveQuery);
@@ -52,8 +87,16 @@ WebSearchRun runWebSearch(const WebSearchConfig & c) {
 	for (const auto & hit : hits) queue.push_back({hit.url, 0});
 	std::set<std::string> queued; for (const auto & hit : hits) queued.insert(hit.url);
 	std::set<std::string> robotsLoaded; std::map<std::string, std::string> robots;
+	std::map<std::string, double> searchQuality;
+	for (std::size_t i = 0; i < hits.size(); ++i) {
+		searchQuality[hits[i].url] = 1.0 - (0.5 * static_cast<double>(i) / std::max<std::size_t>(1, hits.size()));
+	}
 	std::vector<ofxGgmlRagDocument> documents; std::vector<ragWebExample::QuoteHit> structuredQuotes; std::size_t totalBytes = 0;
 	while (!queue.empty() && documents.size() < c.limits.maxPages) {
+		if (std::chrono::steady_clock::now() >= fetchDeadline) {
+			log << "[SCRAPE] stopped after total fetch budget of " << c.totalFetchTimeoutSeconds << " seconds\n";
+			break;
+		}
 		auto item = queue.front(); queue.pop_front(); const auto site = origin(item.first);
 		if (!robotsLoaded.count(site)) { auto rr = get(site + "/robots.txt", c); robots[site] = rr.status == 200 ? rr.data.getText() : ""; robotsLoaded.insert(site); log << "[SCRAPE] robots " << site << " status=" << rr.status << "\n"; }
 		if (!ofxGgmlRagUtils::robotsTxtAllows(item.first, robots[site], c.userAgent)) { log << "[SCRAPE] blocked by robots.txt " << item.first << "\n"; continue; }
@@ -63,6 +106,8 @@ WebSearchRun runWebSearch(const WebSearchConfig & c) {
 		ofxGgmlRagHtmlOptions options; options.maxHtmlBytes = c.limits.maxBytesPerPage;
 		auto converted = ofxGgmlRagUtils::documentFromHtml(item.first, html, options);
 		if (!converted) { log << "[SCRAPE] skipped " << converted.error << " " << item.first << "\n"; continue; }
+		const auto quality = searchQuality.find(item.first);
+		converted.document.qualityHint = quality == searchQuality.end() ? 0.4 : quality->second;
 		totalBytes += html.size(); documents.push_back(converted.document); log << "[SCRAPE] accepted bytes=" << html.size() << " url=" << item.first << "\n";
 		if (c.quoteMode) {
 			const auto pageQuotes = ragWebExample::extractStructuredQuotes(item.first, html, c.person, 2);
@@ -72,12 +117,25 @@ WebSearchRun runWebSearch(const WebSearchConfig & c) {
 		if (item.second < c.limits.maxDepth) { ofxGgmlRagHtmlLinkOptions links; links.robotsTxt = robots[site]; links.robotsTxtUserAgent = c.userAgent; links.maxLinks = c.limits.maxPages; for (const auto & url : ofxGgmlRagUtils::extractHtmlLinks(item.first, html, links)) if (queued.insert(url).second) queue.push_back({url, item.second + 1}); }
 	}
 	if (documents.empty()) { run.error = "no page passed HTTP, robots, byte, and HTML ingestion checks"; run.report = log.str(); return run; }
-	ofxGgmlRagRequest request; request.query = c.quoteMode ? c.person : c.query;
-	ofxGgmlRagRetrievalOptions options; options.search.topK = std::min<std::size_t>(3, documents.size()); options.search.allowQueryRefinement = false;
-	auto retrieval = ofxGgmlRagUtils::retrieve(request, documents, options);
-	log << "[RETRIEVAL] documents=" << documents.size() << " hits=" << retrieval.hits.size() << "\n";
 	if (c.quoteMode) {
 		if (structuredQuotes.empty()) { run.error = "no explicitly structured quotations found in the fetched pages (no generic sentence, model, or fixture fallback)"; run.report = log.str(); return run; }
+		documents.clear();
+		for (const auto & quote : structuredQuotes) {
+			documents.push_back({ quote.url, "Quote attributed to " + c.person + ": " + quote.text, { "web", "quote" }, 1.0 });
+		}
+	}
+	ofxGgmlRagRequest request; request.query = c.quoteMode ? c.person : c.query;
+	const auto desiredHits = std::min<std::size_t>(5, documents.size());
+	ofxGgmlRagRetrievalOptions options;
+	options.search.topK = std::max<std::size_t>(desiredHits, std::min<std::size_t>(desiredHits * 4, 20));
+	options.search.allowQueryRefinement = true;
+	options.search.maxRefinementQueries = 2;
+	options.search.phraseBoost = 0.25;
+	options.search.qualityWeight = 0.15;
+	auto retrieval = ofxGgmlRagUtils::retrieve(request, documents, options);
+	diversifyRetrieval(retrieval, request.query, desiredHits);
+	log << "[RETRIEVAL] documents=" << documents.size() << " hits=" << retrieval.hits.size() << "\n";
+	if (c.quoteMode) {
 		log << "[VERBATIM SOURCE EXCERPTS — ATTRIBUTION REQUIRES SOURCE REVIEW]\n";
 		for (std::size_t i = 0; i < structuredQuotes.size(); ++i) {
 			log << "[QUOTE " << (i + 1) << "] " << structuredQuotes[i].text << "\nURL: " << structuredQuotes[i].url << "\n";

@@ -1228,6 +1228,11 @@ int main(int argc, char ** argv) {
 		std::cerr << "web example quote query transformation failed\n";
 		return 1;
 	}
+	if (ragWebExample::localModelAlias("C:\\models\\Qwen 2.5 (7B).gguf") != "local/Qwen-2.5-7B" ||
+		!ragWebExample::localModelAlias("---.gguf").empty()) {
+		std::cerr << "local model alias did not match llama-server naming\n";
+		return 1;
+	}
 	const auto structuredQuotes = ragWebExample::extractStructuredQuotes("https://quotes.test/alan",
 		"<a href=\"/q/1\" class=\"b-qt item\" title=\"view quote\">Exact &quot;words&quot; here.</a>"
 		"<a class=\"title\" data-author=\"Alan Kay\" href=\"/q/2\">A second exact quotation.</a>"

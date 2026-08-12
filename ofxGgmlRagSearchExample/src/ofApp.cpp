@@ -3,6 +3,7 @@
 #include "imgui_stdlib.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <sstream>
 
@@ -81,6 +82,26 @@ namespace {
 		}
 		return out.str();
 	}
+
+	bool IsGgufPath(const std::string & path) {
+		const auto dot = path.find_last_of('.');
+		if (dot == std::string::npos) return false;
+		auto extension = path.substr(dot + 1);
+		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char ch) {
+			return static_cast<char>(std::tolower(ch));
+		});
+		return extension == "gguf";
+	}
+
+	std::string CommandQuote(const std::string & value) {
+		return "\"" + value + "\"";
+	}
+
+	std::string FindLlamaServerLauncher() {
+		const auto candidate = (ofFilePath::getCurrentExeDirFS() /
+			".." / ".." / ".." / "ofxGgmlLlama" / "scripts" / "start-llama-server.ps1").lexically_normal();
+		return of::filesystem::exists(candidate) ? ofPathToString(candidate) : std::string();
+	}
 }
 
 void ofApp::setup() {
@@ -92,8 +113,34 @@ void ofApp::setup() {
 		queryInput = "citation memory";
 	}
 	sourceRootInput = GetEnvText("OFXGGML_RAG_SOURCE_ROOT");
+	localModelPath = GetEnvText("OFXGGML_TEXT_MODEL");
+	if (!localModelPath.empty()) webConfig.model = ragWebExample::localModelAlias(localModelPath);
 	rag.getRetrievalOptions().context.includeScores = true;
 	runRetrieval();
+}
+
+void ofApp::update() {
+	if (modelServerStarting && modelServerLaunch.valid() &&
+		modelServerLaunch.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		modelServerOutput = modelServerLaunch.get();
+		modelServerStarting = false;
+		if (modelServerOutput.find("llama-server is ready") != std::string::npos) {
+			status = "Selected local model is ready on llama-server port " + ofToString(localModelPort);
+			webConfig.useModel = true;
+		} else if (modelServerOutput.find("Reusing the existing server") != std::string::npos) {
+			status = "Port " + ofToString(localModelPort) + " already serves another process; choose another port";
+		} else {
+			status = "llama-server did not report readiness; inspect Local model output";
+			ofLogWarning("ofxGgmlRagSearchExample") << status << "\n" << modelServerOutput;
+		}
+	}
+	if (webSearchRunning && webSearchLaunch.valid() &&
+		webSearchLaunch.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		webResult = webSearchLaunch.get();
+		webSearchRunning = false;
+		status = webResult.success ? "Live web pipeline completed" : webResult.error;
+		if (!webResult.success) ofLogError("ofxGgmlRagSearchExample") << webResult.error;
+	}
 }
 
 void ofApp::runRetrieval() {
@@ -101,6 +148,9 @@ void ofApp::runRetrieval() {
 	rag.getRetrievalOptions().search.topK = static_cast<std::size_t>(std::max(1, topK));
 	rag.getRetrievalOptions().search.queryVariants = SplitVariants(queryVariantsInput);
 	rag.getRetrievalOptions().search.qualityWeight = useQualityRanking ? 0.15 : 0.0;
+	rag.getRetrievalOptions().search.phraseBoost = 0.25;
+	rag.getRetrievalOptions().search.allowQueryRefinement = true;
+	rag.getRetrievalOptions().search.maxRefinementQueries = 2;
 	rag.getRetrievalOptions().context.includeQuery = true;
 
 	useBuiltInDocument = ofxGgmlRagUtils::trim(sourceRootInput).empty();
@@ -128,11 +178,47 @@ void ofApp::runRetrieval() {
 }
 
 void ofApp::runWebRetrieval() {
-	webResult = runWebSearch(webConfig);
-	status = webResult.success ? "Live web pipeline completed" : webResult.error;
-	if (!webResult.success) {
-		ofLogError("ofxGgmlRagSearchExample") << webResult.error;
+	if (webSearchRunning) return;
+	const auto config = webConfig;
+	webResult = WebSearchRun();
+	webSearchRunning = true;
+	status = "Searching and retrieving web sources...";
+	webSearchLaunch = std::async(std::launch::async, [config]() { return runWebSearch(config); });
+}
+
+void ofApp::browseForLocalModel() {
+	auto result = ofSystemLoadDialog("Select a local GGUF text model");
+	if (!result.bSuccess) return;
+	if (!IsGgufPath(result.getPath())) {
+		status = "Choose a local .gguf text model";
+		return;
 	}
+	localModelPath = result.getPath();
+	webConfig.model = ragWebExample::localModelAlias(localModelPath);
+	status = "Selected local model: " + ofFilePath::getFileName(localModelPath);
+}
+
+void ofApp::startLocalModelServer() {
+	if (modelServerStarting) return;
+	if (!IsGgufPath(localModelPath) || !ofFile::doesFileExist(localModelPath)) {
+		status = "Select an existing local .gguf text model first";
+		return;
+	}
+	const auto launcher = FindLlamaServerLauncher();
+	if (launcher.empty()) {
+		status = "Could not find sibling ofxGgmlLlama/scripts/start-llama-server.ps1";
+		return;
+	}
+	webConfig.model = ragWebExample::localModelAlias(localModelPath);
+	localModelPort = ofClamp(localModelPort, 1024, 65535);
+	webConfig.modelEndpoint = "http://127.0.0.1:" + ofToString(localModelPort) + "/v1/chat/completions";
+	const std::string command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File " +
+		CommandQuote(launcher) + " -ModelPath " + CommandQuote(localModelPath) +
+		" -Alias " + CommandQuote(webConfig.model) + " -Port " + ofToString(localModelPort) + " -Detached";
+	modelServerStarting = true;
+	modelServerOutput.clear();
+	status = "Starting selected local model with llama-server...";
+	modelServerLaunch = std::async(std::launch::async, [command]() { return ofSystem(command); });
 }
 
 bool ofApp::inputTextWithPaste(const char * label, std::string & value) {
@@ -155,7 +241,7 @@ void ofApp::draw() {
 
 	gui.begin();
 	ImGui::SetNextWindowPos(ImVec2(24.0f, 24.0f), ImGuiCond_Once);
-	ImGui::SetNextWindowSize(ImVec2(760.0f, 500.0f), ImGuiCond_Once);
+	ImGui::SetNextWindowSize(ImVec2(800.0f, 620.0f), ImGuiCond_Once);
 	if (ImGui::Begin("ofxGgmlRag Search Example")) {
 		ImGui::TextUnformatted("Retrieval Request");
 		ImGui::Separator();
@@ -175,23 +261,45 @@ void ofApp::draw() {
 			else ImGui::InputText("Web query", &webConfig.query);
 			inputTextWithPaste("Search URL template", webConfig.searchUrlTemplate);
 			inputTextWithPaste("User-Agent", webConfig.userAgent);
-			ImGui::SliderInt("Timeout seconds", &webConfig.timeoutSeconds, 2, 30);
+			ImGui::SliderInt("Page timeout seconds", &webConfig.timeoutSeconds, 2, 30);
+			ImGui::SliderInt("Total fetch seconds", &webConfig.totalFetchTimeoutSeconds, 5, 120);
 			int results = static_cast<int>(webConfig.limits.maxSearchResults), pages = static_cast<int>(webConfig.limits.maxPages), depth = static_cast<int>(webConfig.limits.maxDepth);
 			if (ImGui::SliderInt("Search results", &results, 1, 10)) webConfig.limits.maxSearchResults = results;
 			if (ImGui::SliderInt("Pages", &pages, 1, 10)) webConfig.limits.maxPages = pages;
 			if (ImGui::SliderInt("Same-origin depth", &depth, 0, 2)) webConfig.limits.maxDepth = depth;
-			ImGui::Checkbox("Generate via OpenAI-compatible endpoint", &webConfig.useModel);
-			inputTextWithPaste("Model alias", webConfig.model);
-			inputTextWithPaste("Chat completions endpoint", webConfig.modelEndpoint);
+			ImGui::SeparatorText("Local model (optional answer generation)");
+			inputTextWithPaste("GGUF model", localModelPath);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Browse...##local-model")) browseForLocalModel();
+			ImGui::InputInt("Local server port", &localModelPort);
+			if (modelServerStarting) ImGui::BeginDisabled();
+			if (ImGui::Button("Start selected model locally")) startLocalModelServer();
+			if (modelServerStarting) ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::Checkbox("Generate answer", &webConfig.useModel);
+			ImGui::SliderInt("Model timeout seconds", &webConfig.modelTimeoutSeconds, 5, 180);
+			ImGui::SliderInt("Maximum answer tokens", &webConfig.maxModelTokens, 32, 1024);
+			ImGui::TextWrapped("Starts the sibling ofxGgmlLlama llama-server on a dedicated port without stopping other servers. Choose another port if it is already occupied.");
+			if (ImGui::TreeNode("Compatible server settings")) {
+				inputTextWithPaste("Model alias", webConfig.model);
+				inputTextWithPaste("Chat completions endpoint", webConfig.modelEndpoint);
+				ImGui::TreePop();
+			}
 		}
-		if (ImGui::Button("Run")) {
+		if (webSearchRunning) ImGui::BeginDisabled();
+		if (ImGui::Button(webSearchRunning ? "Searching..." : "Run")) {
 			if (webMode) runWebRetrieval(); else runRetrieval();
 		}
+		if (webSearchRunning) ImGui::EndDisabled();
 
 		ImGui::Spacing();
 		ImGui::TextUnformatted("Status");
 		ImGui::Separator();
 		ImGui::TextWrapped("%s", status.c_str());
+		if (!modelServerOutput.empty() && ImGui::TreeNode("Local model output")) {
+			ImGui::TextWrapped("%s", modelServerOutput.c_str());
+			ImGui::TreePop();
+		}
 		if (!webMode) ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu cache=%s",
 			rag.getLastRetrieval().stats.documentCount,
 			rag.getLastRetrieval().stats.scopedDocumentCount,

@@ -12,6 +12,9 @@ struct WebSearchConfig {
 	std::string model = "";
 	ragWebExample::Limits limits;
 	int timeoutSeconds = 12;
+	int totalFetchTimeoutSeconds = 30;
+	int modelTimeoutSeconds = 60;
+	int maxModelTokens = 256;
 	bool useModel = false;
 	bool quoteMode = false;
 };

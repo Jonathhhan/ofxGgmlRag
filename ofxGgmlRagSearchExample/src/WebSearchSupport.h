@@ -18,6 +18,7 @@ struct Limits {
 std::string urlEncode(const std::string & value);
 std::string expandSearchUrl(const std::string & urlTemplate, const std::string & query);
 std::string quoteSearchQuery(const std::string & person);
+std::string localModelAlias(const std::string & modelPath);
 std::vector<SearchHit> parseSearchHtml(const std::string & html, std::size_t maxResults);
 std::vector<QuoteHit> extractStructuredQuotes(const std::string & sourceUrl, const std::string & html,
 	const std::string & person, std::size_t maxQuotes);

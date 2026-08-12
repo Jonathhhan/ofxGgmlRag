@@ -12,8 +12,12 @@ int main(int argc, char ** argv) {
 		else if (arg == "--person") { config.person = next(); config.quoteMode = true; }
 		else if (arg == "--search-url-template") config.searchUrlTemplate = next();
 		else if (arg == "--user-agent") config.userAgent = next();
+		else if (arg == "--page-timeout") config.timeoutSeconds = std::stoi(next());
+		else if (arg == "--total-fetch-timeout") config.totalFetchTimeoutSeconds = std::stoi(next());
 		else if (arg == "--model") { config.model = next(); config.useModel = true; }
 		else if (arg == "--model-endpoint") config.modelEndpoint = next();
+		else if (arg == "--model-timeout") config.modelTimeoutSeconds = std::stoi(next());
+		else if (arg == "--model-max-tokens") config.maxModelTokens = std::stoi(next());
 		else if (arg == "--max-pages") config.limits.maxPages = static_cast<std::size_t>(std::stoul(next()));
 	}
 	if (runOnce) {
