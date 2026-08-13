@@ -5,6 +5,7 @@
 #include "ofxImGui.h"
 #include "WebSearchRunner.h"
 
+#include <atomic>
 #include <future>
 
 class ofApp : public ofBaseApp {
@@ -12,8 +13,51 @@ public:
 	void setup() override;
 	void update() override;
 	void draw() override;
+	void exit() override;
 
 private:
+	struct LocalRetrievalJob {
+		std::string query;
+		std::string queryVariants;
+		std::string sourceRoot;
+		bool includeContext = true;
+		bool useQualityRanking = true;
+		int topK = 3;
+	};
+
+	struct LocalRetrievalResult {
+		std::string status;
+		std::string report;
+		std::string prompt;
+		std::string answer;
+		std::string citations;
+		std::size_t documentCount = 0;
+		std::size_t scopedDocumentCount = 0;
+		std::size_t skippedDocumentCount = 0;
+		std::size_t chunkCount = 0;
+		std::size_t hitCount = 0;
+		bool cacheHit = false;
+		double elapsedMs = 0.0;
+	};
+
+	class LocalRetrievalWorker : public ofThread {
+	public:
+		void start();
+		void stop();
+		bool submit(LocalRetrievalJob job);
+		bool tryReceive(LocalRetrievalResult & result);
+		bool isBusy() const;
+
+	private:
+		void threadedFunction() override;
+
+		ofThreadChannel<LocalRetrievalJob> jobs;
+		ofThreadChannel<LocalRetrievalResult> results;
+		ofxGgmlRag rag;
+		std::atomic<bool> busy{ false };
+		bool builtInDocumentsReady = false;
+	};
+
 	void runRetrieval();
 	void runWebRetrieval();
 	void browseForLocalModel();
@@ -28,8 +72,8 @@ private:
 	std::string promptText;
 	std::string answerText;
 	std::string citationsText;
-	ofxGgmlRag rag;
-	bool useBuiltInDocument = false;
+	LocalRetrievalWorker localRetrievalWorker;
+	LocalRetrievalResult localRetrievalResult;
 	bool includeContext = true;
 	bool useQualityRanking = true;
 	int topK = 3;

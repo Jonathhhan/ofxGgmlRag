@@ -15,6 +15,9 @@ $env:OFXGGML_RAG_SOURCE_ROOT = "C:\path\to\notes"
 The local-corpus mode uses the stateful `ofxGgmlRag` addon facade to read
 supported `.md` and `.txt` files and run deterministic retrieval. It does not
 create indexes, download models, run embeddings, or write generated artifacts.
+Corpus loading, chunking, retrieval, prompt construction, and citation scoring
+run on a dedicated `ofThread` worker; the UI applies completed result snapshots
+in `update()` and remains responsive for large source folders.
 The `LLM Prompt` tab shows the citation-grounded prompt. The `Answer Draft` tab shows the current
 extractive citation-backed answer preview without claiming model generation.
 The `Citations` tab shows exact local quote candidates with confidence and
@@ -30,7 +33,7 @@ Search ranking combines lexical coverage, exact-phrase boost, bounded query refi
 
 Generated answers are bounded to 256 tokens by default. Page requests, the complete fetch phase, and model generation have separate time budgets so several slow sites cannot consume the model's response window. Adjust these controls in the UI or pass `--page-timeout`, `--total-fetch-timeout`, `--model-timeout`, and `--model-max-tokens` to the headless runner.
 
-The complete web pipeline runs asynchronously in the GUI. The window remains responsive while search, scraping, retrieval, and optional local generation are in progress, and the Run control shows `Searching...` until the result is ready.
+Both local retrieval and the complete web pipeline run asynchronously in the GUI. The window remains responsive while corpus loading, search, scraping, retrieval, and optional local generation are in progress; the Run control exposes the active operation until the result is ready.
 
 Run the complete web path without a window:
 

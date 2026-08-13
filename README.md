@@ -71,7 +71,7 @@ Current addon API version: `1.0.1`.
 
 ## Example
 
-`ofxGgmlRagSearchExample` is the single focused root-level RAG example. Its GUI switches between local text-corpus retrieval and opt-in live web search/scraping. The same example also provides a headless web proof and optional generic OpenAI-compatible generation. `llama-server` from `ofxGgmlLlama`, normally at `http://127.0.0.1:8080`, is the canonical documented backend; compatible servers can be selected by changing the endpoint without adding a provider-specific integration here. Generate the example with addons `ofxGgmlRag` and `ofxImGui`.
+`ofxGgmlRagSearchExample` is the single focused root-level RAG example. Its GUI switches between local text-corpus retrieval and opt-in live web search/scraping. Local corpus work runs on a dedicated `ofThread` worker, while the existing web pipeline remains asynchronous, so neither path blocks the openFrameworks render thread. The same example also provides a headless web proof and optional generic OpenAI-compatible generation. `llama-server` from `ofxGgmlLlama`, normally at `http://127.0.0.1:8080`, is the canonical documented backend; compatible servers can be selected by changing the endpoint without adding a provider-specific integration here. Generate the example with addons `ofxGgmlRag` and `ofxImGui`.
 
 For RAG-lane planning, citation boundaries, and generated index rules, see
 [docs/RAG_WORKFLOWS.md](docs/RAG_WORKFLOWS.md).

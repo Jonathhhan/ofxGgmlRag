@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <sstream>
+#include <utility>
 
 namespace {
 	std::string GetEnvText(const char * name) {
@@ -104,6 +106,108 @@ namespace {
 	}
 }
 
+void ofApp::LocalRetrievalWorker::start() {
+	if (!isThreadRunning()) {
+		startThread();
+	}
+}
+
+void ofApp::LocalRetrievalWorker::stop() {
+	jobs.close();
+	waitForThread(true);
+	results.close();
+}
+
+bool ofApp::LocalRetrievalWorker::submit(LocalRetrievalJob job) {
+	if (busy.exchange(true)) {
+		return false;
+	}
+	const bool sent = jobs.send(std::move(job));
+	if (!sent) {
+		busy.store(false);
+	}
+	return sent;
+}
+
+bool ofApp::LocalRetrievalWorker::tryReceive(LocalRetrievalResult & result) {
+	return results.tryReceive(result);
+}
+
+bool ofApp::LocalRetrievalWorker::isBusy() const {
+	return busy.load();
+}
+
+void ofApp::LocalRetrievalWorker::threadedFunction() {
+	LocalRetrievalJob job;
+	while (jobs.receive(job)) {
+		LocalRetrievalResult completed;
+		const auto startedAt = std::chrono::steady_clock::now();
+		try {
+			rag.setQuery(job.query);
+			rag.getRetrievalOptions().search.topK = static_cast<std::size_t>(std::max(1, job.topK));
+			rag.getRetrievalOptions().search.queryVariants = SplitVariants(job.queryVariants);
+			rag.getRetrievalOptions().search.qualityWeight = job.useQualityRanking ? 0.15 : 0.0;
+			rag.getRetrievalOptions().search.phraseBoost = 0.25;
+			rag.getRetrievalOptions().search.allowQueryRefinement = true;
+			rag.getRetrievalOptions().search.maxRefinementQueries = 2;
+			rag.getRetrievalOptions().context.includeQuery = true;
+			rag.getRetrievalOptions().context.includeScores = true;
+
+			const bool useBuiltInDocument = ofxGgmlRagUtils::trim(job.sourceRoot).empty();
+			if (useBuiltInDocument) {
+				if (!builtInDocumentsReady) {
+					rag.setDocuments(BuiltInDocuments(), "example");
+					builtInDocumentsReady = true;
+				}
+			} else {
+				builtInDocumentsReady = false;
+				rag.clearDocuments();
+				rag.setSourceRoot(job.sourceRoot);
+			}
+
+			ofLogNotice("ofxGgmlRagSearchExample") << "local retrieval executing on ofThread worker";
+			rag.retrieve();
+			ofxGgmlRagReportOptions reportOptions;
+			reportOptions.includeContext = job.includeContext;
+			reportOptions.maxHits = rag.getRetrievalOptions().search.topK;
+			completed.report = rag.format(reportOptions);
+			completed.status = rag.summarize();
+			const auto prompt = rag.buildPrompt();
+			completed.prompt = prompt ? prompt.prompt : prompt.error;
+			const auto answer = rag.draftAnswer();
+			completed.answer = answer ? answer.text : answer.error;
+			completed.citations = FormatCitationSearch(rag.findCitations());
+			if (useBuiltInDocument) {
+				completed.status += "; using built-in documents";
+			}
+
+			const auto & stats = rag.getLastRetrieval().stats;
+			completed.documentCount = stats.documentCount;
+			completed.scopedDocumentCount = stats.scopedDocumentCount;
+			completed.skippedDocumentCount = stats.skippedDocumentCount;
+			completed.chunkCount = stats.chunkCount;
+			completed.hitCount = stats.hitCount;
+			completed.cacheHit = stats.cacheHit;
+		} catch (const std::exception & error) {
+			completed.status = std::string("local retrieval worker failed: ") + error.what();
+			ofLogError("ofxGgmlRagSearchExample") << completed.status;
+		} catch (...) {
+			completed.status = "local retrieval worker failed";
+			ofLogError("ofxGgmlRagSearchExample") << completed.status;
+		}
+		completed.elapsedMs = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - startedAt).count();
+		ofLogNotice("ofxGgmlRagSearchExample")
+			<< "local retrieval completed on ofThread worker: documents=" << completed.documentCount
+			<< " hits=" << completed.hitCount
+			<< " cache=" << (completed.cacheHit ? "hit" : "miss")
+			<< " elapsed=" << ofToString(completed.elapsedMs, 1) << " ms";
+		results.send(std::move(completed));
+		busy.store(false);
+	}
+	busy.store(false);
+}
+
 void ofApp::setup() {
 	ofSetWindowTitle("ofxGgmlRag search example");
 	gui.setup(nullptr, false);
@@ -115,11 +219,21 @@ void ofApp::setup() {
 	sourceRootInput = GetEnvText("OFXGGML_RAG_SOURCE_ROOT");
 	localModelPath = GetEnvText("OFXGGML_TEXT_MODEL");
 	if (!localModelPath.empty()) webConfig.model = ragWebExample::localModelAlias(localModelPath);
-	rag.getRetrievalOptions().context.includeScores = true;
+	localRetrievalWorker.start();
 	runRetrieval();
 }
 
 void ofApp::update() {
+	LocalRetrievalResult completed;
+	while (localRetrievalWorker.tryReceive(completed)) {
+		localRetrievalResult = std::move(completed);
+		status = localRetrievalResult.status;
+		report = localRetrievalResult.report;
+		promptText = localRetrievalResult.prompt;
+		answerText = localRetrievalResult.answer;
+		citationsText = localRetrievalResult.citations;
+	}
+
 	if (modelServerStarting && modelServerLaunch.valid() &&
 		modelServerLaunch.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 		modelServerOutput = modelServerLaunch.get();
@@ -143,37 +257,21 @@ void ofApp::update() {
 	}
 }
 
+void ofApp::exit() {
+	localRetrievalWorker.stop();
+}
+
 void ofApp::runRetrieval() {
-	rag.setQuery(queryInput);
-	rag.getRetrievalOptions().search.topK = static_cast<std::size_t>(std::max(1, topK));
-	rag.getRetrievalOptions().search.queryVariants = SplitVariants(queryVariantsInput);
-	rag.getRetrievalOptions().search.qualityWeight = useQualityRanking ? 0.15 : 0.0;
-	rag.getRetrievalOptions().search.phraseBoost = 0.25;
-	rag.getRetrievalOptions().search.allowQueryRefinement = true;
-	rag.getRetrievalOptions().search.maxRefinementQueries = 2;
-	rag.getRetrievalOptions().context.includeQuery = true;
-
-	useBuiltInDocument = ofxGgmlRagUtils::trim(sourceRootInput).empty();
-	if (useBuiltInDocument) {
-		rag.setDocuments(BuiltInDocuments(), "example");
-	} else {
-		rag.clearDocuments();
-		rag.setSourceRoot(sourceRootInput);
-	}
-	rag.retrieve();
-
-	ofxGgmlRagReportOptions reportOptions;
-	reportOptions.includeContext = includeContext;
-	reportOptions.maxHits = rag.getRetrievalOptions().search.topK;
-	report = rag.format(reportOptions);
-	status = rag.summarize();
-	const auto prompt = rag.buildPrompt();
-	promptText = prompt ? prompt.prompt : prompt.error;
-	const auto answer = rag.draftAnswer();
-	answerText = answer ? answer.text : answer.error;
-	citationsText = FormatCitationSearch(rag.findCitations());
-	if (useBuiltInDocument) {
-		status += "; using built-in documents";
+	LocalRetrievalJob job;
+	job.query = queryInput;
+	job.queryVariants = queryVariantsInput;
+	job.sourceRoot = sourceRootInput;
+	job.includeContext = includeContext;
+	job.useQualityRanking = useQualityRanking;
+	job.topK = topK;
+	status = "Local retrieval running on ofThread worker...";
+	if (!localRetrievalWorker.submit(std::move(job))) {
+		status = "Local retrieval is already running on the ofThread worker.";
 	}
 }
 
@@ -286,11 +384,15 @@ void ofApp::draw() {
 				ImGui::TreePop();
 			}
 		}
-		if (webSearchRunning) ImGui::BeginDisabled();
-		if (ImGui::Button(webSearchRunning ? "Searching..." : "Run")) {
+		const bool operationRunning = webMode ? webSearchRunning : localRetrievalWorker.isBusy();
+		if (operationRunning) ImGui::BeginDisabled();
+		const char * runLabel = webMode
+			? (webSearchRunning ? "Searching..." : "Run")
+			: (localRetrievalWorker.isBusy() ? "Retrieving on ofThread..." : "Run");
+		if (ImGui::Button(runLabel)) {
 			if (webMode) runWebRetrieval(); else runRetrieval();
 		}
-		if (webSearchRunning) ImGui::EndDisabled();
+		if (operationRunning) ImGui::EndDisabled();
 
 		ImGui::Spacing();
 		ImGui::TextUnformatted("Status");
@@ -300,13 +402,14 @@ void ofApp::draw() {
 			ImGui::TextWrapped("%s", modelServerOutput.c_str());
 			ImGui::TreePop();
 		}
-		if (!webMode) ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu cache=%s",
-			rag.getLastRetrieval().stats.documentCount,
-			rag.getLastRetrieval().stats.scopedDocumentCount,
-			rag.getLastRetrieval().stats.skippedDocumentCount,
-			rag.getLastRetrieval().stats.chunkCount,
-			rag.getLastRetrieval().stats.hitCount,
-			rag.getLastRetrieval().stats.cacheHit ? "hit" : "miss");
+		if (!webMode) ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu cache=%s elapsed=%.1fms",
+			localRetrievalResult.documentCount,
+			localRetrievalResult.scopedDocumentCount,
+			localRetrievalResult.skippedDocumentCount,
+			localRetrievalResult.chunkCount,
+			localRetrievalResult.hitCount,
+			localRetrievalResult.cacheHit ? "hit" : "miss",
+			localRetrievalResult.elapsedMs);
 
 		ImGui::Spacing();
 		if (webMode) {
