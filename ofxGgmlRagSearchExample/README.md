@@ -28,6 +28,9 @@ Live-web mode uses a configurable HTML search URL template, explicit User-Agent,
 Enable `Person / quotes` and enter a name to search specifically for quotation sources. Results under `VERBATIM SOURCE EXCERPTS` are copied exactly from the fetched page and always include their URL; the label explicitly warns that attribution still requires reviewing that source. Optional model output appears separately as `MODEL SUMMARY — NOT A QUOTE` and must not be treated as wording by the person.
 
 Editable path/provider/model fields support normal Ctrl+V and also include a field-local `Paste` button. Pasting replaces the full field, which is intentional for paths, aliases, and URLs. The live-web panel also has a `Browse...` button for a local `.gguf` text model. `Start selected model locally` launches the existing sibling `ofxGgmlLlama` `llama-server` on configurable port 8092 by default, derives its `local/<filename>` alias, waits for readiness asynchronously, and then enables grounded answer generation. It does not stop or replace other local model servers; choose another port in the UI if the selected port is occupied.
+The example consumes the launcher's stable `OFXGGML_LLAMA_SERVER_READY=1`
+marker, so a matching already-running model is reused without duplicating
+health or `/v1/models` identity logic in the RAG lane.
 
 Search ranking combines lexical coverage, exact-phrase boost, bounded query refinement, and search-result quality. Web results are reduced to source-diverse cited hits, and quote mode builds the model context from the verified structured quote excerpts instead of unrelated surrounding page text.
 

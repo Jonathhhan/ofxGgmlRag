@@ -127,6 +127,8 @@ Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "IsKeyChordPressed.
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") "Paste##" "smoke example explicit paste control"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") 'ofSystemLoadDialog\("Select a local GGUF text model"' "smoke example local model browser"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") 'start-llama-server\.ps1' "smoke example local llama-server launcher"
+Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") 'OFXGGML_LLAMA_SERVER_READY=1' "smoke example stable llama-server readiness contract"
+Assert-FileNotContains (Join-Path $exampleRoot "src\ofApp.cpp") 'Reusing the existing server' "smoke example human-readable launcher parsing"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") 'std::async' "smoke example asynchronous local model start"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") 'webSearchLaunch.*std::async' "smoke example asynchronous web retrieval"
 Assert-FileContains (Join-Path $exampleRoot "src\ofApp.cpp") 'Searching\.\.\.' "smoke example visible web progress"

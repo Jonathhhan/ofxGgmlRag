@@ -238,13 +238,11 @@ void ofApp::update() {
 		modelServerLaunch.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 		modelServerOutput = modelServerLaunch.get();
 		modelServerStarting = false;
-		if (modelServerOutput.find("llama-server is ready") != std::string::npos) {
+		if (modelServerOutput.find("OFXGGML_LLAMA_SERVER_READY=1") != std::string::npos) {
 			status = "Selected local model is ready on llama-server port " + ofToString(localModelPort);
 			webConfig.useModel = true;
-		} else if (modelServerOutput.find("Reusing the existing server") != std::string::npos) {
-			status = "Port " + ofToString(localModelPort) + " already serves another process; choose another port";
 		} else {
-			status = "llama-server did not report readiness; inspect Local model output";
+			status = "llama-server launch failed or did not report verified readiness; inspect Local model output";
 			ofLogWarning("ofxGgmlRagSearchExample") << status << "\n" << modelServerOutput;
 		}
 	}
