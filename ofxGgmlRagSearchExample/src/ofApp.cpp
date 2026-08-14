@@ -420,9 +420,10 @@ void ofApp::draw() {
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Browse...##local-model")) browseForLocalModel();
 			ImGui::InputInt("Local server port", &localModelPort);
-			if (modelServerStarting) ImGui::BeginDisabled();
+			const bool modelServerStartDisabled = modelServerStarting;
+			if (modelServerStartDisabled) ImGui::BeginDisabled();
 			if (ImGui::Button("Start selected model locally")) startLocalModelServer();
-			if (modelServerStarting) ImGui::EndDisabled();
+			if (modelServerStartDisabled) ImGui::EndDisabled();
 			ImGui::SameLine();
 			ImGui::Checkbox("Generate answer", &webConfig.useModel);
 			ImGui::Checkbox("Strict JSON answer", &webConfig.strictJsonAnswer);
@@ -434,9 +435,10 @@ void ofApp::draw() {
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Browse...##embedding-model")) browseForLocalEmbeddingModel();
 			ImGui::InputInt("Embedding server port", &localEmbeddingPort);
-			if (embeddingServerStarting) ImGui::BeginDisabled();
+			const bool embeddingServerStartDisabled = embeddingServerStarting;
+			if (embeddingServerStartDisabled) ImGui::BeginDisabled();
 			if (ImGui::Button("Start embedding model locally")) startLocalEmbeddingServer();
-			if (embeddingServerStarting) ImGui::EndDisabled();
+			if (embeddingServerStartDisabled) ImGui::EndDisabled();
 			ImGui::SameLine();
 			ImGui::Checkbox("Hybrid reranking", &webConfig.useEmbeddings);
 			float embeddingWeight = static_cast<float>(webConfig.embeddingWeight);
