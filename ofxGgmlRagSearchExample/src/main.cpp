@@ -16,8 +16,12 @@ int main(int argc, char ** argv) {
 		else if (arg == "--total-fetch-timeout") config.totalFetchTimeoutSeconds = std::stoi(next());
 		else if (arg == "--model") { config.model = next(); config.useModel = true; }
 		else if (arg == "--model-endpoint") config.modelEndpoint = next();
+		else if (arg == "--strict-json-answer") config.strictJsonAnswer = true;
 		else if (arg == "--model-timeout") config.modelTimeoutSeconds = std::stoi(next());
 		else if (arg == "--model-max-tokens") config.maxModelTokens = std::stoi(next());
+		else if (arg == "--embedding-model") { config.embeddingModel = next(); config.useEmbeddings = true; }
+		else if (arg == "--embedding-endpoint") config.embeddingEndpoint = next();
+		else if (arg == "--embedding-weight") config.embeddingWeight = std::stod(next());
 		else if (arg == "--max-pages") config.limits.maxPages = static_cast<std::size_t>(std::stoul(next()));
 	}
 	if (runOnce) {

@@ -10,12 +10,17 @@ struct WebSearchConfig {
 	std::string userAgent = "ofxGgmlRagWebSearchExample/1.0 (+https://github.com/jonathhhan/ofxGgmlRag)";
 	std::string modelEndpoint = "http://127.0.0.1:8080/v1/chat/completions";
 	std::string model = "";
+	std::string embeddingEndpoint = "http://127.0.0.1:8081/v1/embeddings";
+	std::string embeddingModel = "";
 	ragWebExample::Limits limits;
 	int timeoutSeconds = 12;
 	int totalFetchTimeoutSeconds = 30;
 	int modelTimeoutSeconds = 60;
 	int maxModelTokens = 256;
 	bool useModel = false;
+	bool useEmbeddings = false;
+	bool strictJsonAnswer = false;
+	double embeddingWeight = 0.55;
 	bool quoteMode = false;
 };
 

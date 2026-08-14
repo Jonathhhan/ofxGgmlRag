@@ -61,7 +61,9 @@ private:
 	void runRetrieval();
 	void runWebRetrieval();
 	void browseForLocalModel();
+	void browseForLocalEmbeddingModel();
 	void startLocalModelServer();
+	void startLocalEmbeddingServer();
 	bool inputTextWithPaste(const char * label, std::string & value);
 
 	std::string queryInput;
@@ -81,11 +83,16 @@ private:
 	WebSearchConfig webConfig;
 	WebSearchRun webResult;
 	std::string localModelPath;
+	std::string localEmbeddingModelPath;
 	std::string modelServerOutput;
+	std::string embeddingServerOutput;
 	std::future<std::string> modelServerLaunch;
+	std::future<std::string> embeddingServerLaunch;
 	std::future<WebSearchRun> webSearchLaunch;
 	int localModelPort = 8092;
+	int localEmbeddingPort = 8093;
 	bool modelServerStarting = false;
+	bool embeddingServerStarting = false;
 	bool webSearchRunning = false;
 	bool webMode = false;
 };

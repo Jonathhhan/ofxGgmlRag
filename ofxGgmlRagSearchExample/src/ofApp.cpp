@@ -219,6 +219,11 @@ void ofApp::setup() {
 	sourceRootInput = GetEnvText("OFXGGML_RAG_SOURCE_ROOT");
 	localModelPath = GetEnvText("OFXGGML_TEXT_MODEL");
 	if (!localModelPath.empty()) webConfig.model = ragWebExample::localModelAlias(localModelPath);
+	localEmbeddingModelPath = GetEnvText("OFXGGML_EMBEDDING_MODEL");
+	if (!localEmbeddingModelPath.empty()) webConfig.embeddingModel = ragWebExample::localModelAlias(localEmbeddingModelPath);
+	auto embeddingServerUrl = GetEnvText("OFXGGML_EMBEDDING_SERVER_URL");
+	while (!embeddingServerUrl.empty() && embeddingServerUrl.back() == '/') embeddingServerUrl.pop_back();
+	if (!embeddingServerUrl.empty()) webConfig.embeddingEndpoint = embeddingServerUrl + "/v1/embeddings";
 	localRetrievalWorker.start();
 	runRetrieval();
 }
@@ -244,6 +249,18 @@ void ofApp::update() {
 		} else {
 			status = "llama-server launch failed or did not report verified readiness; inspect Local model output";
 			ofLogWarning("ofxGgmlRagSearchExample") << status << "\n" << modelServerOutput;
+		}
+	}
+	if (embeddingServerStarting && embeddingServerLaunch.valid() &&
+		embeddingServerLaunch.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+		embeddingServerOutput = embeddingServerLaunch.get();
+		embeddingServerStarting = false;
+		if (embeddingServerOutput.find("OFXGGML_LLAMA_SERVER_READY=1") != std::string::npos) {
+			status = "Selected local embedding model is ready on llama-server port " + ofToString(localEmbeddingPort);
+			webConfig.useEmbeddings = true;
+		} else {
+			status = "embedding llama-server launch failed or did not report verified readiness; inspect Local embedding output";
+			ofLogWarning("ofxGgmlRagSearchExample") << status << "\n" << embeddingServerOutput;
 		}
 	}
 	if (webSearchRunning && webSearchLaunch.valid() &&
@@ -294,6 +311,18 @@ void ofApp::browseForLocalModel() {
 	status = "Selected local model: " + ofFilePath::getFileName(localModelPath);
 }
 
+void ofApp::browseForLocalEmbeddingModel() {
+	auto result = ofSystemLoadDialog("Select a local GGUF embedding model");
+	if (!result.bSuccess) return;
+	if (!IsGgufPath(result.getPath())) {
+		status = "Choose a local .gguf embedding model";
+		return;
+	}
+	localEmbeddingModelPath = result.getPath();
+	webConfig.embeddingModel = ragWebExample::localModelAlias(localEmbeddingModelPath);
+	status = "Selected local embedding model: " + ofFilePath::getFileName(localEmbeddingModelPath);
+}
+
 void ofApp::startLocalModelServer() {
 	if (modelServerStarting) return;
 	if (!IsGgufPath(localModelPath) || !ofFile::doesFileExist(localModelPath)) {
@@ -315,6 +344,29 @@ void ofApp::startLocalModelServer() {
 	modelServerOutput.clear();
 	status = "Starting selected local model with llama-server...";
 	modelServerLaunch = std::async(std::launch::async, [command]() { return ofSystem(command); });
+}
+
+void ofApp::startLocalEmbeddingServer() {
+	if (embeddingServerStarting) return;
+	if (!IsGgufPath(localEmbeddingModelPath) || !ofFile::doesFileExist(localEmbeddingModelPath)) {
+		status = "Select an existing local .gguf embedding model first";
+		return;
+	}
+	const auto launcher = FindLlamaServerLauncher();
+	if (launcher.empty()) {
+		status = "Could not find sibling ofxGgmlLlama/scripts/start-llama-server.ps1";
+		return;
+	}
+	webConfig.embeddingModel = ragWebExample::localModelAlias(localEmbeddingModelPath);
+	localEmbeddingPort = ofClamp(localEmbeddingPort, 1024, 65535);
+	webConfig.embeddingEndpoint = "http://127.0.0.1:" + ofToString(localEmbeddingPort) + "/v1/embeddings";
+	const std::string command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File " +
+		CommandQuote(launcher) + " -ModelPath " + CommandQuote(localEmbeddingModelPath) +
+		" -Alias " + CommandQuote(webConfig.embeddingModel) + " -Port " + ofToString(localEmbeddingPort) + " -Embeddings -Detached";
+	embeddingServerStarting = true;
+	embeddingServerOutput.clear();
+	status = "Starting selected local embedding model with llama-server...";
+	embeddingServerLaunch = std::async(std::launch::async, [command]() { return ofSystem(command); });
 }
 
 bool ofApp::inputTextWithPaste(const char * label, std::string & value) {
@@ -373,12 +425,28 @@ void ofApp::draw() {
 			if (modelServerStarting) ImGui::EndDisabled();
 			ImGui::SameLine();
 			ImGui::Checkbox("Generate answer", &webConfig.useModel);
+			ImGui::Checkbox("Strict JSON answer", &webConfig.strictJsonAnswer);
 			ImGui::SliderInt("Model timeout seconds", &webConfig.modelTimeoutSeconds, 5, 180);
 			ImGui::SliderInt("Maximum answer tokens", &webConfig.maxModelTokens, 32, 1024);
 			ImGui::TextWrapped("Starts the sibling ofxGgmlLlama llama-server on a dedicated port without stopping other servers. Choose another port if it is already occupied.");
+			ImGui::SeparatorText("Local embeddings (optional hybrid reranking)");
+			inputTextWithPaste("Embedding GGUF model", localEmbeddingModelPath);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Browse...##embedding-model")) browseForLocalEmbeddingModel();
+			ImGui::InputInt("Embedding server port", &localEmbeddingPort);
+			if (embeddingServerStarting) ImGui::BeginDisabled();
+			if (ImGui::Button("Start embedding model locally")) startLocalEmbeddingServer();
+			if (embeddingServerStarting) ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::Checkbox("Hybrid reranking", &webConfig.useEmbeddings);
+			float embeddingWeight = static_cast<float>(webConfig.embeddingWeight);
+			if (ImGui::SliderFloat("Semantic weight", &embeddingWeight, 0.0f, 1.0f, "%.2f")) webConfig.embeddingWeight = embeddingWeight;
+			ImGui::TextWrapped("Embeds only the bounded lexical candidate set in memory, then combines lexical and cosine ranks. No index or fetched content is written.");
 			if (ImGui::TreeNode("Compatible server settings")) {
 				inputTextWithPaste("Model alias", webConfig.model);
 				inputTextWithPaste("Chat completions endpoint", webConfig.modelEndpoint);
+				inputTextWithPaste("Embedding model alias", webConfig.embeddingModel);
+				inputTextWithPaste("Embeddings endpoint", webConfig.embeddingEndpoint);
 				ImGui::TreePop();
 			}
 		}
@@ -398,6 +466,10 @@ void ofApp::draw() {
 		ImGui::TextWrapped("%s", status.c_str());
 		if (!modelServerOutput.empty() && ImGui::TreeNode("Local model output")) {
 			ImGui::TextWrapped("%s", modelServerOutput.c_str());
+			ImGui::TreePop();
+		}
+		if (!embeddingServerOutput.empty() && ImGui::TreeNode("Local embedding output")) {
+			ImGui::TextWrapped("%s", embeddingServerOutput.c_str());
 			ImGui::TreePop();
 		}
 		if (!webMode) ImGui::Text("documents=%zu scoped=%zu skipped=%zu chunks=%zu hits=%zu cache=%s elapsed=%.1fms",

@@ -34,6 +34,21 @@ health or `/v1/models` identity logic in the RAG lane.
 
 Search ranking combines lexical coverage, exact-phrase boost, bounded query refinement, and search-result quality. Web results are reduced to source-diverse cited hits, and quote mode builds the model context from the verified structured quote excerpts instead of unrelated surrounding page text.
 
+For semantic reranking, choose a local embedding `.gguf` model and click
+`Start embedding model locally`. The example launches the sibling
+`ofxGgmlLlama` server in embeddings-only mode on port 8093, then embeds the
+query and only the bounded lexical candidate set. Reciprocal-rank fusion
+combines lexical and cosine order with an adjustable semantic weight. Vectors,
+fetched pages, and indexes remain in memory and are not persisted. A failed
+embedding request is reported as the primary failure; it is never hidden by a
+silent lexical fallback.
+
+`Strict JSON answer` requests llama-server schema-constrained output with an
+`answer` string and integer `citation_ids`. The example parses that JSON and
+rejects malformed fields or citation ids that do not exist in the retrieved
+context. Leave the option off for OpenAI-compatible servers that do not support
+`response_format: json_schema`.
+
 Generated answers are bounded to 256 tokens by default. Page requests, the complete fetch phase, and model generation have separate time budgets so several slow sites cannot consume the model's response window. Adjust these controls in the UI or pass `--page-timeout`, `--total-fetch-timeout`, `--model-timeout`, and `--model-max-tokens` to the headless runner.
 
 Both local retrieval and the complete web pipeline run asynchronously in the GUI. The window remains responsive while corpus loading, search, scraping, retrieval, and optional local generation are in progress; the Run control exposes the active operation until the result is ready.
@@ -54,6 +69,12 @@ Optional generation remains a generic OpenAI-compatible request. The canonical t
 
 ```powershell
 bin\ofxGgmlRagSearchExample.exe --run-once --query "What is openFrameworks used for?" --model local-model
+```
+
+Add local semantic reranking and strict grounded output with:
+
+```powershell
+bin\ofxGgmlRagSearchExample.exe --run-once --query "What is openFrameworks used for?" --model local-model --embedding-model local-embedding --embedding-endpoint http://127.0.0.1:8093/v1/embeddings --strict-json-answer
 ```
 
 Use `--model-endpoint` for another compatible endpoint. This addon contains no provider-specific server lifecycle, credentials, or configuration path. Provider availability and HTML markup can change; replace `--search-url-template` with another endpoint containing `{query}` when appropriate.
